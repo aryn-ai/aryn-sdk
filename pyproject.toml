@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "aryn-sdk"
+version = "0.2.0"
+description = "The client library for Aryn services."
+authors = ["aryn.ai <opensource@aryn.ai>"]
+license = "Apache 2.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9"
+httpx = "^0.28.1"
+pydantic = "^2.10.6"
+pandas = ">=2.0"
+numpy = ">=1.21.5,<2"
+pyyaml = "^6.0.1"
+pdf2image = "^1.16.3"
+pillow = ">=11.1.0"
+packaging = "^24.1"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.3.5"
+pytest-mock = "^3.14.0"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^25.1.0"
+ruff = "^0.11.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
