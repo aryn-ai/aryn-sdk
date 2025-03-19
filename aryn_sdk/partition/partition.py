@@ -448,19 +448,6 @@ def _generate_headers(
     return headers
 
 
-def _should_stream() -> bool:
-    # Workaround for vcr.  See https://github.com/aryn-ai/sycamore/issues/958
-    stream = True
-    if "vcr" in sys.modules:
-        ul3 = sys.modules.get("urllib3")
-        if ul3:
-            # Look for tell-tale patched method...
-            mod = ul3.connectionpool.is_connection_dropped.__module__
-            if "mock" in mod:
-                stream = False
-    return stream
-
-
 def _json_options(
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     use_ocr: bool = False,
