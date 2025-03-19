@@ -84,6 +84,7 @@ def partition_file(
     trace_id: Optional[str] = None,  # deprecated
     extra_headers: Optional[dict[str, str]] = None,
     cancel_flag: Optional[BoolFlag] = None,
+    add_to_docset_id: Optional[str] = None,
 ) -> dict:
     """
     Sends file to Aryn DocParse and returns a dict of its document structure and text
@@ -168,7 +169,7 @@ def partition_file(
         trace_id: deprecated
         extra_headers: dict of HTTP headers to send to DocParse
         cancel_flag: way to interrupt partitioning from the outside
-
+        add_to_docset_id: An optional docset_id to which to add the document.
 
     Returns:
         A dictionary containing "status", "elements", and possibly "error"
@@ -212,6 +213,7 @@ def partition_file(
         trace_id=trace_id,
         extra_headers=extra_headers,
         cancel_flag=cancel_flag,
+        add_to_docset_id=add_to_docset_id,
     )
 
 
@@ -240,6 +242,7 @@ def _partition_file_wrapper(
     trace_id: Optional[str] = None,  # deprecated
     extra_headers: Optional[dict[str, str]] = None,
     cancel_flag: Optional[BoolFlag] = None,
+    add_to_docset_id: Optional[str] = None,
 ):
     """Do not call this function directly. Use partition_file or partition_file_async_submit instead."""
 
@@ -273,6 +276,7 @@ def _partition_file_wrapper(
             extra_headers=extra_headers,
             cancel_flag=cancel_flag,
             webhook_url=webhook_url,
+            add_to_docset_id=add_to_docset_id,
         )
     finally:
         if should_close and isinstance(file, BinaryIO):
@@ -304,6 +308,7 @@ def _partition_file_inner(
     extra_headers: Optional[dict[str, str]] = None,
     cancel_flag: Optional[BoolFlag] = None,
     webhook_url: Optional[str] = None,
+    add_to_docset_id: Optional[str] = None,
 ):
     """Do not call this function directly. Use partition_file or partition_file_async_submit instead."""
 
@@ -339,6 +344,7 @@ def _partition_file_inner(
         chunking_options=chunking_options,
         markdown_options=markdown_options,
         output_label_options=output_label_options,
+        add_to_docset_id=add_to_docset_id,
         source=source,
     )
 
@@ -462,6 +468,7 @@ def _json_options(
     chunking_options: Optional[dict[str, Any]] = None,
     markdown_options: Optional[dict[str, Any]] = None,
     output_label_options: Optional[dict[str, Any]] = None,
+    add_to_docset_id: Optional[str] = None,
     source: str = "aryn-sdk",
 ) -> str:
     # isn't type-checking fun
@@ -494,6 +501,8 @@ def _json_options(
         options["markdown_options"] = markdown_options
     if output_label_options:
         options["output_label_options"] = output_label_options
+    if add_to_docset_id:
+        options["add_to_docset_id"] = add_to_docset_id
 
     options["source"] = source
 
@@ -525,6 +534,7 @@ def partition_file_async_submit(
     extra_headers: Optional[dict[str, str]] = None,
     webhook_url: Optional[str] = None,
     async_submit_url: Optional[str] = None,
+    add_to_docset_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Submits a file to be partitioned asynchronously. Meant to be used in tandem with `partition_file_async_result`.
@@ -587,6 +597,7 @@ def partition_file_async_submit(
         trace_id=trace_id,
         extra_headers=extra_headers,
         webhook_url=webhook_url,
+        add_to_docset_id=add_to_docset_id,
     )
 
 
