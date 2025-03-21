@@ -17,7 +17,7 @@ from ..types.docset import DocSetMetadata, DocSetUpdate
 from ..types.document import Document, DocumentMetadata, FieldUpdates
 from ..types.prompt import PromptType
 from ..types.schema import Schema
-from ..types.search import SimpleQueryRequest, SimpleQueryResponse
+from ..types.search import SearchRequest, SearchResponse
 from ..types.task import AsyncTaskMap
 from ..types.transforms import TransformResponse
 
@@ -347,16 +347,16 @@ class Client:
         self,
         *,
         docset_id,
-        query: SimpleQueryRequest,
+        query: SearchRequest,
         extra_headers: Optional[dict[str, str]] = None,
-    ) -> Response[SimpleQueryResponse]:
+    ) -> Response[SearchResponse]:
         req = self.client.build_request(
             "POST",
             f"/v1/query/search/{docset_id}",
             json=query.model_dump(),
             headers=extra_headers,
         )
-        return self._make_request(req, SimpleQueryResponse)
+        return self._make_request(req, SearchResponse)
 
     # ----------------------------------------------
     # Transform APIs

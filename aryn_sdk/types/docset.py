@@ -10,7 +10,7 @@ class DocSetMetadata(BaseModel):
     account_id: str = Field(description="The account id containing the DocSet.")
     docset_id: str = Field(description="The unique id for the DocSet.")
     name: str = Field(description="The name of the DocSet.")
-    created: datetime = Field(description="The creation time of this DocSet.")
+    created_at: datetime = Field(description="The creation time of this DocSet.")
     readonly: bool = Field(description="Whether the DocSet is read-only.")
     properties: Optional[dict[str, JsonValue]] = Field(
         default=None, description="Additional properties for the DocSet."

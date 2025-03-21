@@ -2,7 +2,7 @@ from typing import Annotated, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
-class SimpleQueryRequest(BaseModel):
+class SearchRequest(BaseModel):
     query: Annotated[Optional[str], Field(description="The query to search for")]
     query_type: Annotated[
         Literal["keyword", "lexical", "vector", "hybrid"],
@@ -53,7 +53,7 @@ class SimpleQueryRequest(BaseModel):
         extra = "forbid"
 
 
-class SimpleQueryResponse(BaseModel):
+class SearchResponse(BaseModel):
     results: Annotated[
         list,
         Field(
