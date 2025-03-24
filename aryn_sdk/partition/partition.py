@@ -2,7 +2,7 @@ from os import PathLike
 from typing import BinaryIO, Literal, Optional, Union, Any
 from urllib.parse import urlparse, urlunparse
 from collections.abc import Mapping
-from aryn_sdk.config import ArynConfig
+from aryn_sdk.client.config import ArynConfig
 import httpx
 import sys
 import json
