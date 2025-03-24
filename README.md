@@ -68,31 +68,57 @@ client.get_doc_binary()
 from aryn_sdk.client.client import Client
 
 client = Client()
+docset_id = None # my docset id
 
 # Search by query
+search_request = SearchRequest(query="test_query")
+results = client.search(docset_id=docset_id, query="my query")
 
 # Search by filter
+filter_request = SearchRequest(query="test_filter_query", properties_filter="(properties.entity.name='test')")
+results = client.search(docset_id=docset_id, query="my query")
 ```
 
-### Job APIs
+### Properties APIs
 
 ```python
-# Extract entities
+from aryn_sdk.client.client import Client
+from aryn_sdk.types.schema import Schema, SchemaField
 
-# Delete extracted entities
+client = Client()
+docset_id = None # my docset id
+schema_field = SchemaField(name="name", field_type="string")
+schema = Schema(fields=[schema_field])
+
+# Extract properties
+
+client_obj.extract_properties(docset_id=docset_id, schema=schema)
+
+# Delete extracted properties
+client_obj.delete_properties(docset_id=docset_id, schema=schema)
 ```
 
 
 ### Async APIs
 
 ```python
-# Run extract_properties asynchrnously
+from aryn_sdk.client.client import Client
+from aryn_sdk.types.schema import Schema, SchemaField
 
+client = Client()
+
+# Run extract_properties and delete_properties asynchrnously
+schema_field = SchemaField(name="name", field_type="string")
+schema = Schema(fields=[schema_field])
+client_obj.extract_properties_async(docset_id=docset_id, schema=schema) # async implementation
+client_obj.delete_properties_async(docset_id=docset_id, schema=schema) # async implementation
 
 # Check the status and get the task result
-
+task = None # my task id
+get_async_result = client.get_async_result(task=task_id)
 
 # List all outstanding async tasks.
+client.list_async_tasks()
 ```
 
 
