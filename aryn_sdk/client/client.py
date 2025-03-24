@@ -36,8 +36,12 @@ class Client:
 
         self.config = ArynConfig(aryn_api_key=aryn_api_key, aryn_url=aryn_url)
 
-        headers = (extra_headers or {}) | {"Authorization": f"Bearer {self.config.api_key()}"}
-        self.client = httpx.Client(base_url=self.config.aryn_url(), headers=headers, timeout=90.0)
+        headers = (extra_headers or {}) | {
+            "Authorization": f"Bearer {self.config.api_key()}"
+        }
+        self.client = httpx.Client(
+            base_url=self.config.aryn_url(), headers=headers, timeout=90.0
+        )
 
     def _make_raw_request(self, req: Request):
         res = self.client.send(req)
@@ -56,7 +60,12 @@ class Client:
         return Response(raw_response=res, value=response_type(**res.json()))
 
     def _make_paginated_request(
-        self, req: Request, responseType: Type[ResponseType], list_key: str, *request_args, **request_kwargs
+        self,
+        req: Request,
+        responseType: Type[ResponseType],
+        list_key: str,
+        *request_args,
+        **request_kwargs,
     ) -> PaginatedResponse[ResponseType]:
         res = self._make_raw_request(req)
         return PaginatedResponse(
@@ -85,14 +94,18 @@ class Client:
         if schema is not None:
             json_body["schema"] = schema.model_dump()
 
-        req = self.client.build_request("POST", "/v1/storage/docsets", json=json_body, headers=extra_headers)
+        req = self.client.build_request(
+            "POST", "/v1/storage/docsets", json=json_body, headers=extra_headers
+        )
         return self._make_request(req, DocSetMetadata)
 
     def clone_docset(
         self, *, docset_id: str, extra_headers: Optional[dict[str, str]] = None
     ) -> Response[DocSetMetadata]:
         return self._make_request(
-            self.client.build_request("POST", f"/v1/storage/docsets/{docset_id}/clone", headers=extra_headers),
+            self.client.build_request(
+                "POST", f"/v1/storage/docsets/{docset_id}/clone", headers=extra_headers
+            ),
             DocSetMetadata,
         )
 
@@ -116,29 +129,49 @@ class Client:
         args = ("GET", "/v1/storage/docsets")
         kwargs: dict[str, Any] = {"params": params or None, "headers": extra_headers}
         req = self.client.build_request(*args, **kwargs)
-        return self._make_paginated_request(req, DocSetMetadata, "items", *args, **kwargs)
-
-    def get_docset(self, *, docset_id: str, extra_headers: Optional[dict[str, str]] = None) -> Response[DocSetMetadata]:
-        return self._make_request(
-            self.client.build_request("GET", f"/v1/storage/docsets/{docset_id}", headers=extra_headers), DocSetMetadata
+        return self._make_paginated_request(
+            req, DocSetMetadata, "items", *args, **kwargs
         )
 
-    def update_docset(
-        self, *, docset_id: str, update: DocSetUpdate, extra_headers: Optional[dict[str, str]] = None
+    def get_docset(
+        self, *, docset_id: str, extra_headers: Optional[dict[str, str]] = None
     ) -> Response[DocSetMetadata]:
         return self._make_request(
             self.client.build_request(
-                "PATCH", f"/v1/storage/docsets/{docset_id}", json=update.model_dump(), headers=extra_headers
+                "GET", f"/v1/storage/docsets/{docset_id}", headers=extra_headers
+            ),
+            DocSetMetadata,
+        )
+
+    def update_docset(
+        self,
+        *,
+        docset_id: str,
+        update: DocSetUpdate,
+        extra_headers: Optional[dict[str, str]] = None,
+    ) -> Response[DocSetMetadata]:
+        return self._make_request(
+            self.client.build_request(
+                "PATCH",
+                f"/v1/storage/docsets/{docset_id}",
+                json=update.model_dump(),
+                headers=extra_headers,
             ),
             DocSetMetadata,
         )
 
     def set_readonly_docset(
-        self, *, docset_id: str, readonly: bool, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id: str,
+        readonly: bool,
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> Response[DocSetMetadata]:
         return self._make_request(
             self.client.build_request(
-                "POST", f"/v1/storage/docsets/{docset_id}/readonly/{int(readonly)}", headers=extra_headers
+                "POST",
+                f"/v1/storage/docsets/{docset_id}/readonly/{int(readonly)}",
+                headers=extra_headers,
             ),
             DocSetMetadata,
         )
@@ -147,7 +180,9 @@ class Client:
         self, *, docset_id: str, extra_headers: Optional[dict[str, str]] = None
     ) -> Response[DocSetMetadata]:
         return self._make_request(
-            self.client.build_request("DELETE", f"/v1/storage/docsets/{docset_id}", headers=extra_headers),
+            self.client.build_request(
+                "DELETE", f"/v1/storage/docsets/{docset_id}", headers=extra_headers
+            ),
             DocSetMetadata,
         )
 
@@ -171,7 +206,9 @@ class Client:
                 try:
                     import boto3
                 except ImportError:
-                    raise ImportError("Please install the boto3 library to read from S3 URLs.")
+                    raise ImportError(
+                        "Please install the boto3 library to read from S3 URLs."
+                    )
 
                 s3 = boto3.client("s3")
                 bucket, key = str(file)[5:].split("/", 1)
@@ -192,7 +229,11 @@ class Client:
             data["options"] = json.dumps(options).encode("utf-8")
 
         req = self.client.build_request(
-            "POST", f"/v1/storage/docsets/{docset_id}/docs", files=files, json=data, headers=extra_headers
+            "POST",
+            f"/v1/storage/docsets/{docset_id}/docs",
+            files=files,
+            json=data,
+            headers=extra_headers,
         )
         return self._make_request(req, DocumentMetadata)
 
@@ -213,9 +254,14 @@ class Client:
             page_param["page_token"] = page_token
 
         args = ("GET", f"/v1/storage/docsets/{docset_id}/docs")
-        kwargs: dict[str, Any] = {"params": page_param or None, "headers": extra_headers}
+        kwargs: dict[str, Any] = {
+            "params": page_param or None,
+            "headers": extra_headers,
+        }
         req = self.client.build_request(*args, **kwargs)
-        return self._make_paginated_request(req, DocumentMetadata, "items", *args, **kwargs)
+        return self._make_paginated_request(
+            req, DocumentMetadata, "items", *args, **kwargs
+        )
 
     def get_doc(
         self,
@@ -228,7 +274,10 @@ class Client:
     ) -> Response[Document]:
         data = {"include_elements": include_elements, "include_binary": include_binary}
         req = self.client.build_request(
-            "GET", f"/v1/storage/docsets/{docset_id}/docs/{doc_id}", data=data, headers=extra_headers
+            "GET",
+            f"/v1/storage/docsets/{docset_id}/docs/{doc_id}",
+            data=data,
+            headers=extra_headers,
         )
         return self._make_request(req, Document)
 
@@ -244,7 +293,9 @@ class Client:
         # that writing it to a file is the best way to handle it, but it simplifies
         # the typing of the response for now.
         req = self.client.build_request(
-            "GET", f"/v1/storage/docsets/{docset_id}/docs/{doc_id}/binary", headers=extra_headers
+            "GET",
+            f"/v1/storage/docsets/{docset_id}/docs/{doc_id}/binary",
+            headers=extra_headers,
         )
         res = self._make_raw_request(req)
 
@@ -258,7 +309,12 @@ class Client:
                 file_obj.write(data)
 
     def update_doc_properties(
-        self, *, docset_id: str, doc_id: str, updates: FieldUpdates, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id: str,
+        doc_id: str,
+        updates: FieldUpdates,
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> Response[Document]:
         req = self.client.build_request(
             "PATCH",
@@ -269,11 +325,17 @@ class Client:
         return self._make_request(req, Document)
 
     def delete_doc(
-        self, *, docset_id: str, doc_id: str, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id: str,
+        doc_id: str,
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> Response[DocumentMetadata]:
         return self._make_request(
             self.client.build_request(
-                "DELETE", f"/v1/storage/docsets/{docset_id}/docs/{doc_id}", headers=extra_headers
+                "DELETE",
+                f"/v1/storage/docsets/{docset_id}/docs/{doc_id}",
+                headers=extra_headers,
             ),
             DocumentMetadata,
         )
@@ -282,10 +344,17 @@ class Client:
     # Search APIs
     # ----------------------------------------------
     def search(
-        self, *, docset_id, query: SearchRequest, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id,
+        query: SearchRequest,
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> Response[SearchResponse]:
         req = self.client.build_request(
-            "POST", f"/v1/query/search/{docset_id}", json=query.model_dump(), headers=extra_headers
+            "POST",
+            f"/v1/query/search/{docset_id}",
+            json=query.model_dump(),
+            headers=extra_headers,
         )
         return self._make_request(req, SearchResponse)
 
@@ -294,7 +363,11 @@ class Client:
     # ----------------------------------------------
 
     def extract_properties(
-        self, *, docset_id: str, schema: Schema, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id: str,
+        schema: Schema,
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> Response[TransformResponse]:
         req = self.client.build_request(
             "POST",
@@ -306,7 +379,11 @@ class Client:
         return self._make_request(req, TransformResponse)
 
     def extract_properties_async(
-        self, *, docset_id: str, schema: Schema, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id: str,
+        schema: Schema,
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> AsyncTask[TransformResponse]:
         req = self.client.build_request(
             "POST",
@@ -327,7 +404,11 @@ class Client:
         )
 
     def delete_properties(
-        self, *, docset_id: str, schema: Schema, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id: str,
+        schema: Schema,
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> Response[TransformResponse]:
         req = self.client.build_request(
             "POST",
@@ -339,7 +420,11 @@ class Client:
         return self._make_request(req, TransformResponse)
 
     def delete_properties_async(
-        self, *, docset_id: str, schema: Schema, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id: str,
+        schema: Schema,
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> AsyncTask[TransformResponse]:
         req = self.client.build_request(
             "POST",
@@ -363,7 +448,9 @@ class Client:
     # Async task APIs
     # ----------------------------------------------
 
-    def _get_task_and_filters(self, task: Union[AsyncTask, str]) -> Tuple[str, Optional[str], Optional[str]]:
+    def _get_task_and_filters(
+        self, task: Union[AsyncTask, str]
+    ) -> Tuple[str, Optional[str], Optional[str]]:
         method_filter = None
         path_filter = None
 
@@ -388,7 +475,9 @@ class Client:
         task_id, method_filter, path_filter = self._get_task_and_filters(task)
 
         req = self.client.build_request(
-            "POST", f"/v1/async/cancel/{task_id}", params={"method_filter": method_filter, "path_filter": path_filter}
+            "POST",
+            f"/v1/async/cancel/{task_id}",
+            params={"method_filter": method_filter, "path_filter": path_filter},
         )
 
         res = self._make_raw_request(req)
@@ -398,12 +487,16 @@ class Client:
         task_id, method_filter, path_filter = self._get_task_and_filters(task)
 
         req = self.client.build_request(
-            "GET", f"/v1/async/result/{task_id}", params={"method_filter": method_filter, "path_filter": path_filter}
+            "GET",
+            f"/v1/async/result/{task_id}",
+            params={"method_filter": method_filter, "path_filter": path_filter},
         )
 
         return self._make_raw_request(req)
 
-    def get_async_result(self, task: Union[AsyncTask, str]) -> Union[SimpleResponse, Response]:
+    def get_async_result(
+        self, task: Union[AsyncTask, str]
+    ) -> Union[SimpleResponse, Response]:
         res = self._get_async_result_internal(task)
 
         if res.status_code == 200:
