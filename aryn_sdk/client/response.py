@@ -78,7 +78,9 @@ class PaginatedResponse(Generic[T]):
         curr_json.update({"page_token": self._next_token})
         self._request_kwargs["params"] = curr_json
 
-        new_request = self._client.client.build_request(*self._request_args, **self._request_kwargs)
+        new_request = self._client.client.build_request(
+            *self._request_args, **self._request_kwargs
+        )
 
         self.curr_raw_response = self._client._make_raw_request(new_request)
         self._process_response(self.curr_raw_response)

@@ -7,13 +7,19 @@ class DocumentMetadata(BaseModel):
 
     account_id: str = Field(description="The account id containing the Document.")
     doc_id: str = Field(description="The unique id for the Document.")
-    docset_id: str = Field(description="The unique id for the DocSet containing the Document.")
-    created_at: str = Field(description="The time at which this document was added to the system.")
+    docset_id: str = Field(
+        description="The unique id for the DocSet containing the Document."
+    )
+    created_at: str = Field(
+        description="The time at which this document was added to the system."
+    )
     name: str = Field(description="The name of this Document.")
     size: int = Field(description="The size of the Document in bytes.")
     content_type: str = Field(description="The content type of the source Document.")
     # TODO: What do we use properties for here?
-    properties: Optional[dict] = Field(default=None, description="Additional properties for the Document.")
+    properties: Optional[dict] = Field(
+        default=None, description="Additional properties for the Document."
+    )
 
 
 class Element(BaseModel):
@@ -21,20 +27,33 @@ class Element(BaseModel):
 
     id: str = Field(description="The unique id for the Element.")
     type: str = Field(description="The type of the Element.")
-    text_representation: Optional[str] = Field(description="The text representation of the Element.")
-    embedding: Optional[list[float]] = Field(description="The vector embedding of the Element.")
-    properties: dict[str, Any] = Field(default={}, description="A map of properties for the Element.")
-    bbox: tuple[float, float, float, float] = Field(description="The bounding box of the Element.")
+    text_representation: Optional[str] = Field(
+        description="The text representation of the Element."
+    )
+    embedding: Optional[list[float]] = Field(
+        description="The vector embedding of the Element."
+    )
+    properties: dict[str, Any] = Field(
+        default={}, description="A map of properties for the Element."
+    )
+    bbox: tuple[float, float, float, float] = Field(
+        description="The bounding box of the Element."
+    )
 
 
 class Document(BaseModel):
     """ """
 
     id: str = Field(description="The unique id for the Document.")
-    elements: list[Element] = Field(default=[], description="The elements contained in the Document.")
-    properties: dict[str, Any] = Field(default={}, description="A map of properties for the Document.")
+    elements: list[Element] = Field(
+        default=[], description="The elements contained in the Document."
+    )
+    properties: dict[str, Any] = Field(
+        default={}, description="A map of properties for the Document."
+    )
     binary_data: Optional[str] = Field(
-        default=None, description="The binary content of the document, encoded as a base64 string."
+        default=None,
+        description="The binary content of the document, encoded as a base64 string.",
     )
 
 
@@ -61,7 +80,9 @@ class JSONPointer:
         self.parts = parts
 
     def __str__(self):
-        return "/" + "/".join(p.replace("~", "~0").replace("/", "~1") for p in self.parts)
+        return "/" + "/".join(
+            p.replace("~", "~0").replace("/", "~1") for p in self.parts
+        )
 
     @classmethod
     def parse(cls, value: Union[str, list[str], "JSONPointer"]) -> "JSONPointer":
@@ -103,7 +124,9 @@ class JSONPointer:
 JSONPointerType = Annotated[
     JSONPointer,
     PlainValidator(JSONPointer.parse),
-    WrapSerializer(lambda v, handler: str(v) if isinstance(v, JSONPointer) else handler(v)),
+    WrapSerializer(
+        lambda v, handler: str(v) if isinstance(v, JSONPointer) else handler(v)
+    ),
 ]
 
 
@@ -130,7 +153,8 @@ class RemoveOperation(JSONPatchOperationBase):
 
 class ReplaceOperation(JSONPatchOperationBase):
     op: Literal["replace"] = Field(
-        default="replace", description="The type of JSON Patch operation. Currently only 'replace' is supported"
+        default="replace",
+        description="The type of JSON Patch operation. Currently only 'replace' is supported",
     )
     path: JSONPointerType = Field(
         description="a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) object identifying the value to be replaced."
