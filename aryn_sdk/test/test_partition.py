@@ -153,7 +153,7 @@ def test_partition_it_no_api_key():
         with open(RESOURCE_DIR / "pdfs" / "3m_table.pdf", "rb") as f:
             partition_file(f, aryn_api_key="x")
     assert einfo.value.response.status_code == 403
-    assert einfo.value.response.json().get("detail") == "Invalid API Key."
+    assert einfo.value.response.json().get("detail") == "Invalid Aryn API key"
 
 
 def test_partition_file_auto_rotation():
