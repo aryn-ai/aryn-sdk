@@ -1,4 +1,4 @@
-from .partition import (
+from ..client.partition import (
     partition_file,
     partition_file_async_submit,
     partition_file_async_result,
@@ -12,7 +12,7 @@ from .partition import (
     PartitionTaskError,
     PartitionTaskNotFoundError,
 )
-from .art import draw_with_boxes
+from ..client.art import draw_with_boxes
 
 __all__ = [
     "partition_file",
