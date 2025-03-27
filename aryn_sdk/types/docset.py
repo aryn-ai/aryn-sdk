@@ -15,16 +15,10 @@ class DocSetMetadata(BaseModel):
     properties: Optional[dict[str, JsonValue]] = Field(
         default=None, description="Additional properties for the DocSet."
     )
-    size: Optional[int] = Field(
-        default=None, description="The size of the DocSet in bytes."
-    )
-    query_schema: Optional[Schema] = Field(
-        default=None, description="The schema of the DocSet."
-    )
+    size: Optional[int] = Field(default=None, description="The size of the DocSet in bytes.")
+    query_schema: Optional[Schema] = Field(default=None, description="The schema of the DocSet.")
     # Map from prompt type to prompt_id.
-    prompts: dict[PromptType, str] = Field(
-        default={}, description="The prompts associated with this DocSet."
-    )
+    prompts: dict[PromptType, str] = Field(default={}, description="The prompts associated with this DocSet.")
 
 
 class DocSetUpdate(BaseModel):
