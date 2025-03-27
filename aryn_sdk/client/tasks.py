@@ -13,12 +13,7 @@ T = TypeVar("T")
 
 class AsyncTask(Generic[T]):
     def __init__(
-        self,
-        client: "Client",
-        task_id: str,
-        method: Optional[str],
-        path: Optional[str],
-        response_type: Type[T],
+        self, client: "Client", task_id: str, method: Optional[str], path: Optional[str], response_type: Type[T]
     ) -> None:
         self.task_id = task_id
         self._method = method

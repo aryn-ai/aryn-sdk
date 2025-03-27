@@ -2,7 +2,7 @@ from os import PathLike
 from typing import BinaryIO, Literal, Optional, Union, Any
 from urllib.parse import urlparse, urlunparse
 from collections.abc import Mapping
-from aryn_sdk.client.config import ArynConfig
+from .config import ArynConfig
 import httpx
 import sys
 import json
@@ -73,6 +73,7 @@ def partition_file(
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
+    extract_image_format: Optional[str] = None,
     selected_pages: Optional[list[Union[list[int], int]]] = None,
     chunking_options: Optional[dict[str, Any]] = None,
     aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
@@ -119,8 +120,12 @@ def partition_file(
             - 'model_selection': expression to instruct DocParse how to choose which model to use for table
                 extraction. See https://docs.aryn.ai/docparse/processing_options for more details. Default:
                 "pixels > 500 -> deformable_detr; table_transformer"
-        extract_images: extract image contents in ppm format, base64 encoded.
+        extract_images: extract image contents. By default returns the image in base64 encoded ppm format,
+              but can be configured to return the image in other formats via the extract_image_format parameter.
             default: False
+        extract_image_format: specify the format of the extracted images. Only applies when extract_images=True.
+              Must be one of ["PPM", "PNG", "JPEG"]
+            default: PPM
         selected_pages: list of individual pages (1-indexed) from the pdf to partition
             default: None
         chunking_options: Specify options for chunking the document.
@@ -202,6 +207,7 @@ def partition_file(
         text_extraction_options=text_extraction_options,
         table_extraction_options=table_extraction_options,
         extract_images=extract_images,
+        extract_image_format=extract_image_format,
         selected_pages=selected_pages,
         chunking_options=chunking_options,
         aps_url=aps_url,
@@ -230,6 +236,7 @@ def _partition_file_wrapper(
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
+    extract_image_format: Optional[str] = None,
     selected_pages: Optional[list[Union[list[int], int]]] = None,
     chunking_options: Optional[dict[str, Any]] = None,
     aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
@@ -264,6 +271,7 @@ def _partition_file_wrapper(
             text_extraction_options=text_extraction_options,
             table_extraction_options=table_extraction_options,
             extract_images=extract_images,
+            extract_image_format=extract_image_format,
             selected_pages=selected_pages,
             chunking_options=chunking_options,
             aps_url=aps_url,
@@ -296,6 +304,7 @@ def _partition_file_inner(
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
+    extract_image_format: Optional[str] = None,
     selected_pages: Optional[list[Union[list[int], int]]] = None,
     chunking_options: Optional[dict[str, Any]] = None,
     aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
@@ -320,15 +329,11 @@ def _partition_file_inner(
                 '"aps_url" and "docparse_url" parameters were both set. "aps_url" is deprecated. Using "docparse_url".'
             )
         else:
-            logging.warning(
-                '"aps_url" parameter is deprecated. Use "docparse_url" instead'
-            )
+            logging.warning('"aps_url" parameter is deprecated. Use "docparse_url" instead')
             docparse_url = aps_url
     if docparse_url is None:
         docparse_url = ARYN_DOCPARSE_URL
-    source = (
-        extra_headers.pop("X-Aryn-Origin", "aryn-sdk") if extra_headers else "aryn-sdk"
-    )
+    source = extra_headers.pop("X-Aryn-Origin", "aryn-sdk") if extra_headers else "aryn-sdk"
 
     options_str = _json_options(
         threshold=threshold,
@@ -339,6 +344,7 @@ def _partition_file_inner(
         text_extraction_options=text_extraction_options,
         table_extraction_options=table_extraction_options,
         extract_images=extract_images,
+        extract_image_format=extract_image_format,
         selected_pages=selected_pages,
         output_format=output_format,
         chunking_options=chunking_options,
@@ -351,9 +357,7 @@ def _partition_file_inner(
     _logger.debug(f"{options_str}")
 
     files: Mapping = {"options": options_str.encode("utf-8"), "pdf": file}
-    headers = _generate_headers(
-        aryn_config.api_key(), webhook_url, trace_id, extra_headers
-    )
+    headers = _generate_headers(aryn_config.api_key(), webhook_url, trace_id, extra_headers)
 
     content = []
     partial_line = []
@@ -361,9 +365,7 @@ def _partition_file_inner(
 
     # If you run into issues VCR.py, you can apply the monkey patch described here:
     # https://github.com/kevin1024/vcrpy/issues/656#issuecomment-2492379346
-    with httpx.stream(
-        "POST", docparse_url, files=files, headers=headers, verify=ssl_verify
-    ) as resp:
+    with httpx.stream("POST", docparse_url, files=files, headers=headers, verify=ssl_verify, timeout=500) as resp:
         raise_error_on_non_2xx(resp)
 
         for part in resp.iter_bytes():
@@ -423,14 +425,10 @@ def raise_error_on_non_2xx(resp: httpx.Response) -> None:
         )
 
 
-def _process_config(
-    aryn_api_key: Optional[str] = None, aryn_config: Optional[ArynConfig] = None
-) -> ArynConfig:
+def _process_config(aryn_api_key: Optional[str] = None, aryn_config: Optional[ArynConfig] = None) -> ArynConfig:
     if aryn_api_key is not None:
         if aryn_config is not None:
-            _logger.warning(
-                "Both aryn_api_key and aryn_config were provided. Using aryn_api_key"
-            )
+            _logger.warning("Both aryn_api_key and aryn_config were provided. Using aryn_api_key")
         aryn_config = ArynConfig(aryn_api_key=aryn_api_key)
     if aryn_config is None:
         aryn_config = ArynConfig()
@@ -463,6 +461,7 @@ def _json_options(
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
+    extract_image_format: Optional[str] = None,
     selected_pages: Optional[list[Union[list[int], int]]] = None,
     output_format: Optional[str] = None,
     chunking_options: Optional[dict[str, Any]] = None,
@@ -472,9 +471,7 @@ def _json_options(
     source: str = "aryn-sdk",
 ) -> str:
     # isn't type-checking fun
-    options: dict[
-        str, Union[float, bool, str, list[Union[list[int], int]], dict[str, Any]]
-    ] = dict()
+    options: dict[str, Union[float, bool, str, list[Union[list[int], int]], dict[str, Any]]] = dict()
     if threshold is not None:
         options["threshold"] = threshold
     if use_ocr:
@@ -485,6 +482,8 @@ def _json_options(
         options["ocr_language"] = ocr_language
     if extract_images:
         options["extract_images"] = extract_images
+    if extract_image_format:
+        options["extract_image_format"] = extract_image_format
     if extract_table_structure:
         options["extract_table_structure"] = extract_table_structure
     if text_extraction_options:
@@ -522,6 +521,7 @@ def partition_file_async_submit(
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
+    extract_image_format: Optional[str] = None,
     selected_pages: Optional[list[Union[list[int], int]]] = None,
     chunking_options: Optional[dict[str, Any]] = None,
     aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
@@ -563,16 +563,12 @@ def partition_file_async_submit(
     if async_submit_url:
         docparse_url = async_submit_url
     elif not aps_url and not docparse_url:
-        docparse_url = _convert_sync_to_async_url(
-            ARYN_DOCPARSE_URL, "/submit", truncate=False
-        )
+        docparse_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/submit", truncate=False)
     else:
         if aps_url:
             aps_url = _convert_sync_to_async_url(aps_url, "/submit", truncate=False)
         if docparse_url:
-            docparse_url = _convert_sync_to_async_url(
-                docparse_url, "/submit", truncate=False
-            )
+            docparse_url = _convert_sync_to_async_url(docparse_url, "/submit", truncate=False)
 
     return _partition_file_wrapper(
         file=file,
@@ -586,6 +582,7 @@ def partition_file_async_submit(
         text_extraction_options=text_extraction_options,
         table_extraction_options=table_extraction_options,
         extract_images=extract_images,
+        extract_image_format=extract_image_format,
         selected_pages=selected_pages,
         chunking_options=chunking_options,
         aps_url=aps_url,
@@ -638,17 +635,13 @@ def partition_file_async_result(
         Unlike `partition_file`, this function does not raise an Exception if the partitioning failed.
     """
     if not async_result_url:
-        async_result_url = _convert_sync_to_async_url(
-            ARYN_DOCPARSE_URL, "/result", truncate=True
-        )
+        async_result_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/result", truncate=True)
 
     aryn_config = _process_config(aryn_api_key, aryn_config)
 
     specific_task_url = f"{async_result_url.rstrip('/')}/{task_id}"
     headers = _generate_headers(aryn_config.api_key())
-    response = httpx.get(
-        specific_task_url, params=g_parameters, headers=headers, verify=ssl_verify
-    )
+    response = httpx.get(specific_task_url, params=g_parameters, headers=headers, verify=ssl_verify)
     if response.status_code == 200:
         return {"task_status": "done", "result": response.json()}
     elif response.status_code == 202:
@@ -677,17 +670,13 @@ def partition_file_async_cancel(
     For an example of usage see README.md
     """
     if not async_cancel_url:
-        async_cancel_url = _convert_sync_to_async_url(
-            ARYN_DOCPARSE_URL, "/cancel", truncate=True
-        )
+        async_cancel_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/cancel", truncate=True)
 
     aryn_config = _process_config(aryn_api_key, aryn_config)
 
     specific_task_url = f"{async_cancel_url.rstrip('/')}/{task_id}"
     headers = _generate_headers(aryn_config.api_key())
-    response = httpx.post(
-        specific_task_url, params=g_parameters, headers=headers, verify=ssl_verify
-    )
+    response = httpx.post(specific_task_url, params=g_parameters, headers=headers, verify=ssl_verify)
     if response.status_code == 200:
         return
     elif response.status_code == 404:
@@ -720,16 +709,12 @@ def partition_file_async_list(
         }
     """
     if not async_list_url:
-        async_list_url = _convert_sync_to_async_url(
-            ARYN_DOCPARSE_URL, "/list", truncate=True
-        )
+        async_list_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/list", truncate=True)
 
     aryn_config = _process_config(aryn_api_key, aryn_config)
 
     headers = _generate_headers(aryn_config.api_key())
-    response = httpx.get(
-        async_list_url, params=g_parameters, headers=headers, verify=ssl_verify
-    )
+    response = httpx.get(async_list_url, params=g_parameters, headers=headers, verify=ssl_verify)
     raise_error_on_non_2xx(response)
     if response.status_code != 200:
         raise PartitionTaskError("Unexpected response code", response.status_code)
@@ -777,14 +762,7 @@ def table_elem_to_dataframe(elem: dict) -> Optional[pd.DataFrame]:
 
     table = elem["table"]
 
-    header_rows = sorted(
-        set(
-            row_num
-            for cell in table["cells"]
-            for row_num in cell["rows"]
-            if cell["is_header"]
-        )
-    )
+    header_rows = sorted(set(row_num for cell in table["cells"] for row_num in cell["rows"] if cell["is_header"]))
     i = -1
     for i in range(len(header_rows)):
         if header_rows[i] != i:
@@ -812,9 +790,7 @@ def table_elem_to_dataframe(elem: dict) -> Optional[pd.DataFrame]:
     header = grid[: max_header_prefix_row + 1, :]
     flattened_header = []
     for npcol in header.transpose():
-        flattened_header.append(
-            " | ".join(OrderedDict.fromkeys((c for c in npcol if c != "")))
-        )
+        flattened_header.append(" | ".join(OrderedDict.fromkeys((c for c in npcol if c != ""))))
     df = pd.DataFrame(
         grid[max_header_prefix_row + 1 :, :],
         index=None,
@@ -888,9 +864,7 @@ def convert_image_element(
 
     """
     if b64encode and format == "PIL":
-        raise ValueError(
-            "b64encode was True but format was PIL. Cannot b64-encode a PIL Image"
-        )
+        raise ValueError("b64encode was True but format was PIL. Cannot b64-encode a PIL Image")
 
     if elem.get("type") != "Image":
         return None
@@ -898,9 +872,15 @@ def convert_image_element(
     width = elem["properties"]["image_size"][0]
     height = elem["properties"]["image_size"][1]
     mode = elem["properties"]["image_mode"]
-    im = Image.frombytes(
-        mode, (width, height), base64.b64decode(elem["binary_representation"])
-    )
+
+    raw_bytes = base64.b64decode(elem["binary_representation"])
+    in_format = elem["properties"].get("image_format")
+
+    if in_format is None:
+        im = Image.frombytes(mode, (width, height), data=raw_bytes)
+    else:
+        in_buf = io.BytesIO(raw_bytes)
+        im = Image.open(in_buf, formats=[in_format])
 
     if format == "PIL":
         return im
