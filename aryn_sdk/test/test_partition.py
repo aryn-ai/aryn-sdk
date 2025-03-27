@@ -1,6 +1,6 @@
 from os import PathLike
 from typing import BinaryIO, Union
-from aryn_sdk.partition.partition import ARYN_DOCPARSE_URL
+from aryn_sdk.client.partition import ARYN_DOCPARSE_URL
 import pytest
 import json
 import time
@@ -242,7 +242,7 @@ def test_partiton_file_async_url_forwarding(mocker):
         assert url == standard_async_url
 
     mocker.patch(
-        "aryn_sdk.partition.partition._partition_file_inner",
+        "aryn_sdk.client.partition._partition_file_inner",
         side_effect=check_standard_url,
     )
     partition_file_async_submit(dummy)
@@ -262,7 +262,7 @@ def test_partiton_file_async_url_forwarding(mocker):
         assert url == nonstandard_async_url_example
 
     mocker.patch(
-        "aryn_sdk.partition.partition._partition_file_inner",
+        "aryn_sdk.client.partition._partition_file_inner",
         side_effect=check_nonstandard_url,
     )
     call_partition_file(nonstandard_url_example)
