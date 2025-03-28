@@ -5,16 +5,12 @@ from pydantic import BaseModel, Field, model_validator
 class SearchRequest(BaseModel):
     query: Annotated[Optional[str], Field(description="The query to search for")] = None
     query_type: Annotated[
-        Literal["keyword", "lexical", "vector", "hybrid"],
-        Field(description="The type of query to perform."),
+        Literal["keyword", "lexical", "vector", "hybrid"], Field(description="The type of query to perform.")
     ] = "lexical"
     properties_filter: Annotated[
-        Optional[str],
-        Field(description="A filter to apply to the properties of the documents."),
+        Optional[str], Field(description="A filter to apply to the properties of the documents.")
     ] = None
-    return_type: Annotated[
-        Literal["doc", "element"], Field(description="The type of result to return.")
-    ] = "doc"
+    return_type: Annotated[Literal["doc", "element"], Field(description="The type of result to return.")] = "doc"
     include_fields: Annotated[
         Optional[list[str]],
         Field(
@@ -37,9 +33,7 @@ class SearchRequest(BaseModel):
     @model_validator(mode="after")
     def require_query_when_query_type_uses_vector_search(self):
         if self.query is None and self.query_type in ("vector", "hybrid"):
-            raise ValueError(
-                "query must be provided when query_type is vector or hybrid"
-            )
+            raise ValueError("query must be provided when query_type is vector or hybrid")
         return self
 
     @model_validator(mode="after")
