@@ -42,6 +42,8 @@ jobs:
           sed -E -i "s/\version = \".+\"/version = \"$NEW_VERSION\"/g" pyproject.toml
           grep version pyproject.toml
 
+          git diff
+
           echo "NEWBRANCH=bump_version_$NEW_VERSION" >> $GITHUB_ENV
         env:
           NEW_VERSION: ${{ steps.bump.outputs.new_version }}
