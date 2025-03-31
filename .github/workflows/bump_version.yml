@@ -59,6 +59,7 @@ jobs:
 
       - name: Create a PR against aryn-sdk
         run: |
+          git fetch origin main
           gh pr create --head "$NEWBRANCH" --fill
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
