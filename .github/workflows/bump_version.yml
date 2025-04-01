@@ -1,16 +1,17 @@
 name: Bump Version
 
 on:
-  workflow_dispatch:
-    inputs:
-      bump_level:
-        required: true
-        default: 'patch'
-        type: choice
-        options:
-          - major
-          - minor
-          - patch
+  push:
+  # workflow_dispatch:
+  #   inputs:
+  #     bump_level:
+  #       required: true
+  #       default: 'patch'
+  #       type: choice
+  #       options:
+  #         - major
+  #         - minor
+  #         - patch
 
 jobs:
   BumpVersion:
@@ -35,7 +36,9 @@ jobs:
         run: |
           # NB: If you want to run this on the mac, you need to specify an arg for -i, e.g. -i ' '
           sed -E -i "s/g_version = \".+\"/g_version = \"$NEW_VERSION\"/g" aryn_sdk/client/partition.py
-          sed -E -i "s/version.*/version = \"$NEW_VERSION\"/g" pyproject.toml
+          sed -E -i "s/version = \".+\"/version = \"$NEW_VERSION\"/g" pyproject.toml
+
+          git diff
 
           echo "NEWBRANCH=bump_version_$NEW_VERSION" >> $GITHUB_ENV
         env:
@@ -46,19 +49,19 @@ jobs:
           git config --local user.email "opensource@aryn.ai"
           git config --local user.name "Aryn OpenSource Bot"
 
-      - name: Create and push to a branch.
-        run: |
-          git checkout -b "$NEWBRANCH"
-          git add .
+      # - name: Create and push to a branch.
+      #   run: |
+      #     git checkout -b "$NEWBRANCH"
+      #     git add .
 
-          git commit -m "Automated: Bump Version to $NEW_VERSION."
-          git push --set-upstream origin "$NEWBRANCH"
-        env:
-          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+      #     git commit -m "Automated: Bump Version to $NEW_VERSION."
+      #     git push --set-upstream origin "$NEWBRANCH"
+      #   env:
+      #     NEW_VERSION: ${{ steps.bump.outputs.new_version }}
 
-      - name: Create a PR against aryn-sdk
-        run: |
-          git fetch origin main
-          gh pr create --head "$NEWBRANCH" --fill
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Create a PR against aryn-sdk
+      #   run: |
+      #     git fetch origin main
+      #     gh pr create --head "$NEWBRANCH" --fill
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
