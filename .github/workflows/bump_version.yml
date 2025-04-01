@@ -1,0 +1,64 @@
+name: Bump Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_level:
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+jobs:
+  BumpVersion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get Current version
+        run: |
+          curr_version=`grep version pyproject.toml | grep -E -o "[0-9\.]+"`
+          echo CURR_VERSION=$curr_version >> $GITHUB_ENV
+
+      - name: Get new version number
+        id: bump
+        uses: cbrgm/semver-bump-action@v1.0.35
+        with:
+          current-version: ${{ env.CURR_VERSION }}
+          bump-level: ${{ inputs.bump_level }}
+
+      - name: Update version in package.
+        run: |
+          # NB: If you want to run this on the mac, you need to specify an arg for -i, e.g. -i ' '
+          sed -E -i "s/^g_version = \".+\"/g_version = \"$NEW_VERSION\"/g" aryn_sdk/client/partition.py
+          sed -E -i "s/^version = \".+\"/version = \"$NEW_VERSION\"/g" pyproject.toml
+
+          echo "NEWBRANCH=bump_version_$NEW_VERSION" >> $GITHUB_ENV
+        env:
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+
+      - name: Configure git identity.
+        run: |
+          git config --local user.email "opensource@aryn.ai"
+          git config --local user.name "Aryn OpenSource Bot"
+
+      - name: Create and push to a branch.
+        run: |
+          git checkout -b "$NEWBRANCH"
+          git add .
+
+          git commit -m "Automated: Bump Version to $NEW_VERSION."
+          git push --set-upstream origin "$NEWBRANCH"
+        env:
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+
+      - name: Create a PR against aryn-sdk
+        run: |
+          git fetch origin main
+          gh pr create --head "$NEWBRANCH" --fill
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
