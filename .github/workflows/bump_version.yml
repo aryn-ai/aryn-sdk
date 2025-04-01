@@ -42,7 +42,7 @@ jobs:
           sed -E -n "/version.*/p" pyproject.toml
 
           #sed -E -i "s/\version = \".+\"/version = \"$NEW_VERSION\"/g" pyproject.toml
-          sed -E -i " " "s/version.*/version = \"$NEW_VERSION\"/g" pyproject.toml
+          sed -E -i "s/version.*/version = \"$NEW_VERSION\"/g" pyproject.toml
 
           grep version pyproject.toml
 
@@ -55,15 +55,15 @@ jobs:
           git config --local user.email "opensource@aryn.ai"
           git config --local user.name "Aryn OpenSource Bot"
 
-      - name: Create and push to a branch.
-        run: |
-          git checkout -b "$NEWBRANCH"
-          git add .
+      # - name: Create and push to a branch.
+      #   run: |
+      #     git checkout -b "$NEWBRANCH"
+      #     git add .
 
-          git commit -m "Automated: Bump Version to {NEW_VERSION}."
-          git push --set-upstream origin "$NEWBRANCH"
-        env:
-          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+      #     git commit -m "Automated: Bump Version to {NEW_VERSION}."
+      #     git push --set-upstream origin "$NEWBRANCH"
+      #   env:
+      #     NEW_VERSION: ${{ steps.bump.outputs.new_version }}
 
 
       # - name: Create a PR against aryn-sdk
