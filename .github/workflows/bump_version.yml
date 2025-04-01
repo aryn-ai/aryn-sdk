@@ -41,7 +41,9 @@ jobs:
 
           sed -E -n "/version.*/p" pyproject.toml
 
-          sed -E -i "s/\version = \".+\"/version = \"$NEW_VERSION\"/g" pyproject.toml
+          #sed -E -i "s/\version = \".+\"/version = \"$NEW_VERSION\"/g" pyproject.toml
+          sed -E -i " " "s/version.*/version = \"$NEW_VERSION\"/g" pyproject.toml
+
           grep version pyproject.toml
 
           echo "NEWBRANCH=bump_version_$NEW_VERSION" >> $GITHUB_ENV
@@ -64,9 +66,9 @@ jobs:
           NEW_VERSION: ${{ steps.bump.outputs.new_version }}
 
 
-      - name: Create a PR against aryn-sdk
-        run: |
-          git fetch origin main
-          gh pr create --head "$NEWBRANCH" --fill
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Create a PR against aryn-sdk
+      #   run: |
+      #     git fetch origin main
+      #     gh pr create --head "$NEWBRANCH" --fill
+      #   env:
+      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
