@@ -29,12 +29,12 @@ jobs:
         uses: cbrgm/semver-bump-action@v1.0.35
         with:
           current-version: ${{ env.CURR_VERSION }}
-          bump-level: ${{ inputs.version_bump_type }}
+          bump-level: ${{ inputs.bump_level }}
 
       - name: Update version in package.
         run: |
           # NB: If you want to run this on the mac, you need to specify an arg for -i, e.g. -i ' '
-          sed -E -i "s/\g_version = \".+\"/g_version = \"$NEW_VERSION\"/g" aryn_sdk/client/partition.py
+          sed -E -i "s/g_version = \".+\"/g_version = \"$NEW_VERSION\"/g" aryn_sdk/client/partition.py
           sed -E -i "s/version.*/version = \"$NEW_VERSION\"/g" pyproject.toml
 
           echo "NEWBRANCH=bump_version_$NEW_VERSION" >> $GITHUB_ENV
