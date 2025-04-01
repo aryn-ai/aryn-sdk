@@ -30,7 +30,7 @@ jobs:
         uses: cbrgm/semver-bump-action@v1.0.35
         with:
           current-version: ${{ env.CURR_VERSION }}
-          bump-level: ${{ inputs.bump_level }}
+          bump-level: patch #${{ inputs.bump_level }}
 
       - name: Update version in package.
         run: |
