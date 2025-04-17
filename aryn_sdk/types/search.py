@@ -23,6 +23,12 @@ class SearchRequest(BaseModel):
             description="When `True`, the server returns additional debug information (the embedding calculated for a vector or hybrid query) in the response.",
         ),
     ] = False
+    include_element_embedding: Annotated[
+        Optional[bool],
+        Field(
+            description='When `False`, and return_type is "element", the server does not return the embeddings of elements in the response.',
+        ),
+    ] = False
 
     @model_validator(mode="after")
     def check_query_or_properties_filter_present(self):
