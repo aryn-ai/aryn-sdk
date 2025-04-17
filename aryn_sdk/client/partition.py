@@ -66,7 +66,8 @@ def partition_file(
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
-    use_ocr: bool = False,
+    text_mode: Optional[str] = None,
+    use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
     extract_table_structure: bool = False,
@@ -101,18 +102,25 @@ def partition_file(
         threshold: specify the cutoff for detecting bounding boxes. Must be set to "auto" or
             a floating point value between 0.0 and 1.0.
             default: None (Aryn DocParse will choose)
-        use_ocr: extract text using an OCR model instead of extracting embedded text in PDF.
+        text_mode:  Allows for specifying the text extraction mode. Valid options are 'standard', 'fine_grained', 'standard_ocr', and 'vision_ocr'.
+            'standard' will use the standard text extraction pipeline, 'fine_grained' will use a more fine-grained text extraction pipeline,
+            'standard_ocr' will use the standard OCR pipeline, and 'vision_ocr' will use a vision OCR pipeline. If this option is specified,
+            it will override use_ocr and text_extraction_options even if specified.
+            default: 'standard'
+        use_ocr: deprecated, use text_mode instead.
+            extract text using an OCR model instead of extracting embedded text in PDF.
             default: False
         summarize_images: Generate a text summary of detected images using a VLM.
         ocr_language: specify the language to use for OCR. If not set, the language will be english.
             default: English
         extract_table_structure: extract tables and their structural content.
             default: False
-        text_extraction_options: Specify options for text extraction, currently only supports
-            'ocr_text_mode', with valid options 'vision' and 'standard'. If OCR is enabled and 'vision' specified,
-            attempt to extract all non-table text using vision models, else will use the standard OCR pipeline.
-            This can be useful for documents with complex layouts or non-standard fonts.
-            default: {'ocr_text_mode': 'standard'}
+        text_extraction_options: 'ocr_text_mode' is deprecated, use text_mode instead.
+            Specify options for text extraction, supports 'ocr_text_mode', with valid options 'vision' and 'standard' and boolean
+            'remove_line_breaks'.For 'ocr_text_mode', attempt to extract all non-table text
+            using vision models if 'vision', else will use the standard OCR pipeline. Vision is useful for documents with complex layouts
+            or non-standard fonts. 'remove_line_breaks' will remove line breaks from the text.
+            default: {'remove_line_breaks': False}
         table_extraction_options: Specify options for table extraction. Only enabled if table extraction
             is enabled. Default is {}. Options:
             - 'include_additional_text': Attempt to enhance the table structure by merging in tokens from
@@ -189,17 +197,19 @@ def partition_file(
                 data = partition_file(
                     f,
                     aryn_api_key="MY-ARYN-API-KEY",
-                    use_ocr=True,
+                    text_mode="standard_ocr",
                     extract_table_structure=True,
                     extract_images=True
                 )
             elements = data['elements']
     """
+
     return _partition_file_wrapper(
         file=file,
         aryn_api_key=aryn_api_key,
         aryn_config=aryn_config,
         threshold=threshold,
+        text_mode=text_mode,
         use_ocr=use_ocr,
         summarize_images=summarize_images,
         ocr_language=ocr_language,
@@ -229,7 +239,8 @@ def _partition_file_wrapper(
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
-    use_ocr: bool = False,
+    text_mode: Optional[str] = None,
+    use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
     extract_table_structure: bool = False,
@@ -264,6 +275,7 @@ def _partition_file_wrapper(
             aryn_api_key=aryn_api_key,
             aryn_config=aryn_config,
             threshold=threshold,
+            text_mode=text_mode,
             use_ocr=use_ocr,
             summarize_images=summarize_images,
             ocr_language=ocr_language,
@@ -297,7 +309,8 @@ def _partition_file_inner(
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
-    use_ocr: bool = False,
+    text_mode: Optional[str] = None,
+    use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
     extract_table_structure: bool = False,
@@ -331,13 +344,25 @@ def _partition_file_inner(
         else:
             logging.warning('"aps_url" parameter is deprecated. Use "docparse_url" instead')
             docparse_url = aps_url
+    if text_mode is not None and (
+        use_ocr is not None or (text_extraction_options and ("ocr_text_mode" in text_extraction_options))
+    ):
+        logging.warning(
+            '"text_mode" parameter was set. Since "use_ocr" and "ocr_text_mode" parameters are deprecated, using "text_mode".'
+        )
+    else:
+        if use_ocr:
+            ocr_text_mode = "standard"
+            if text_extraction_options and ("ocr_text_mode" in text_extraction_options):
+                ocr_text_mode = text_extraction_options["ocr_text_mode"]
+            text_mode = f"{ocr_text_mode}_ocr"
     if docparse_url is None:
         docparse_url = ARYN_DOCPARSE_URL
     source = extra_headers.pop("X-Aryn-Origin", "aryn-sdk") if extra_headers else "aryn-sdk"
 
     options_str = _json_options(
         threshold=threshold,
-        use_ocr=use_ocr,
+        text_mode=text_mode,
         summarize_images=summarize_images,
         ocr_language=ocr_language,
         extract_table_structure=extract_table_structure,
@@ -454,7 +479,7 @@ def _generate_headers(
 
 def _json_options(
     threshold: Optional[Union[float, Literal["auto"]]] = None,
-    use_ocr: bool = False,
+    text_mode: Optional[str] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
     extract_table_structure: bool = False,
@@ -474,8 +499,6 @@ def _json_options(
     options: dict[str, Union[float, bool, str, list[Union[list[int], int]], dict[str, Any]]] = dict()
     if threshold is not None:
         options["threshold"] = threshold
-    if use_ocr:
-        options["use_ocr"] = use_ocr
     if summarize_images:
         options["summarize_images"] = summarize_images
     if ocr_language:
@@ -484,6 +507,8 @@ def _json_options(
         options["extract_images"] = extract_images
     if extract_image_format:
         options["extract_image_format"] = extract_image_format
+    if text_mode:
+        options["text_mode"] = text_mode
     if extract_table_structure:
         options["extract_table_structure"] = extract_table_structure
     if text_extraction_options:
@@ -514,7 +539,8 @@ def partition_file_async_submit(
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
-    use_ocr: bool = False,
+    text_mode: Optional[str] = None,
+    use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
     extract_table_structure: bool = False,
@@ -575,6 +601,7 @@ def partition_file_async_submit(
         aryn_api_key=aryn_api_key,
         aryn_config=aryn_config,
         threshold=threshold,
+        text_mode=text_mode,
         use_ocr=use_ocr,
         summarize_images=summarize_images,
         ocr_language=ocr_language,
@@ -744,7 +771,7 @@ def table_elem_to_dataframe(elem: dict) -> Optional[pd.DataFrame]:
             with open("partition-me.pdf", "rb") as f:
                 data = partition_file(
                     f,
-                    use_ocr=True,
+                    text_mode="standard_ocr",
                     extract_table_structure=True,
                     extract_images=True
                 )
@@ -818,7 +845,7 @@ def tables_to_pandas(data: dict) -> list[tuple[dict, Optional[pd.DataFrame]]]:
                 data = partition_file(
                     f,
                     aryn_api_key="MY-ARYN-API-KEY",
-                    use_ocr=True,
+                    text_mode="standard_ocr",
                     extract_table_structure=True,
                     extract_images=True
                 )

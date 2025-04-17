@@ -39,7 +39,7 @@ class Client:
         headers = (extra_headers or {}) | {"Authorization": f"Bearer {self.config.api_key()}"}
         self.client = httpx.Client(base_url=self.config.aryn_url(), headers=headers, timeout=90.0)
 
-    def _make_raw_request(self, req: Request):
+    def _make_raw_request(self, req: Request) -> httpx.Response:
         res = self.client.send(req)
         if res.status_code >= 300:
             raise ArynSDKException(res)
@@ -186,13 +186,12 @@ class Client:
             file_request = file
 
         files: dict[str, Any] = {"file": file_request}
-        data: dict[str, Any] = {"options": None}
 
         if options is not None:
-            data["options"] = json.dumps(options).encode("utf-8")
+            files["options"] = json.dumps(options).encode("utf-8")
 
         req = self.client.build_request(
-            "POST", f"/v1/storage/docsets/{docset_id}/docs", files=files, json=data, headers=extra_headers
+            "POST", f"/v1/storage/docsets/{docset_id}/docs", files=files, headers=extra_headers
         )
         return self._make_request(req, DocumentMetadata)
 

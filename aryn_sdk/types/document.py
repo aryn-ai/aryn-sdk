@@ -1,5 +1,5 @@
 from typing import Annotated, Any, Literal, Optional, Union
-from pydantic import BaseModel, Field, JsonValue, PlainValidator, WrapSerializer
+from pydantic import AliasChoices, BaseModel, Field, JsonValue, PlainValidator, WrapSerializer
 
 
 class DocumentMetadata(BaseModel):
@@ -30,7 +30,7 @@ class Element(BaseModel):
 class Document(BaseModel):
     """ """
 
-    id: str = Field(description="The unique id for the Document.")
+    id: str = Field(description="The unique id for the Document.", validation_alias=AliasChoices("id", "doc_id"))
     elements: list[Element] = Field(default=[], description="The elements contained in the Document.")
     properties: dict[str, Any] = Field(default={}, description="A map of properties for the Document.")
     binary_data: Optional[str] = Field(
