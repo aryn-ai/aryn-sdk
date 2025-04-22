@@ -21,7 +21,7 @@ _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.INFO)
 _logger.addHandler(logging.StreamHandler(sys.stderr))
 
-g_version = "0.2.2"
+g_version = "0.2.1"
 g_parameters = {"path_filter": "^/v1/document/partition$"}
 
 
@@ -358,7 +358,9 @@ def _partition_file_inner(
             text_mode = f"{ocr_text_mode}_ocr"
     if docparse_url is None:
         docparse_url = ARYN_DOCPARSE_URL
-    source = extra_headers.pop("X-Aryn-Origin", "aryn-sdk") if extra_headers else "aryn-sdk"
+    source = "aryn-sdk"
+    if extra_headers:
+        source = extra_headers.get("X-Aryn-Origin", "aryn-sdk")
 
     options_str = _json_options(
         threshold=threshold,

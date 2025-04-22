@@ -3,10 +3,11 @@ import json
 import logging
 import mimetypes
 from os import PathLike
-from typing import Any, BinaryIO, ContextManager, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, BinaryIO, ContextManager, Iterator, Optional, Tuple, Type, TypeVar, Union
 
 import httpx
 from httpx import Request
+from httpx_sse import connect_sse
 from pydantic import JsonValue
 
 from .config import ArynConfig
@@ -16,6 +17,7 @@ from .tasks import AsyncTask
 from ..types.docset import DocSetMetadata, DocSetUpdate
 from ..types.document import Document, DocumentMetadata, FieldUpdates
 from ..types.prompt import PromptType
+from ..types.query import LogicalPlan, Query, QueryResult, QueryTraceDoc, QueryEvent, QueryEventType
 from ..types.schema import Schema
 from ..types.search import SearchRequest, SearchResponse
 from ..types.task import AsyncTaskMap
@@ -281,12 +283,79 @@ class Client:
     # Search APIs
     # ----------------------------------------------
     def search(
-        self, *, docset_id, query: SearchRequest, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id: str,
+        query: SearchRequest,
+        page_size: Optional[int] = None,
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> Response[SearchResponse]:
+        params = {"page_size": page_size} if page_size is not None else None
         req = self.client.build_request(
-            "POST", f"/v1/query/search/{docset_id}", json=query.model_dump(), headers=extra_headers
+            "POST", f"/v1/query/search/{docset_id}", params=params, json=query.model_dump(), headers=extra_headers
         )
         return self._make_request(req, SearchResponse)
+
+    # ----------------------------------------------
+    # Query APIs
+    # ----------------------------------------------
+
+    def generate_plan(self, *, query: Query, extra_headers: Optional[dict[str, str]] = None) -> Response[LogicalPlan]:
+        req = self.client.build_request(
+            "POST",
+            "/v1/query/plan",
+            json=query.model_dump(),
+            headers=extra_headers,
+        )
+        return self._make_request(req, LogicalPlan)
+
+    def edit_plan(
+        self, *, query: Query, feedback: str, extra_headers: Optional[dict[str, str]] = None
+    ) -> Response[LogicalPlan]:
+        body = {"query": query.model_dump(), "feedback": feedback}
+
+        req = self.client.build_request(
+            "PATCH",
+            "/v1/query/plan",
+            json=body,
+            headers=extra_headers,
+        )
+        return self._make_request(req, LogicalPlan)
+
+    def query(
+        self, *, query: Query, extra_headers: Optional[dict[str, str]] = None
+    ) -> Union[Response[QueryResult], Iterator[QueryEvent]]:
+
+        method = "POST"
+        url = "/v1/query"
+        kwargs = {
+            "json": query.model_dump(),
+        }
+        if extra_headers:
+            kwargs["headers"] = extra_headers
+
+        if not query.stream:
+            req = self.client.build_request(method, url, **kwargs)
+            return self._make_request(req, QueryResult)
+
+        with connect_sse(self.client, method, url, **kwargs) as event_source:
+            for sse in event_source.iter_sse():
+                value: Any
+
+                if sse.event == QueryEventType.PLAN:
+                    value = LogicalPlan.model_validate_json(sse.data)
+                elif sse.event == QueryEventType.RESULT_DOC:
+                    value = Document.model_validate_json(sse.data)
+                elif sse.event == QueryEventType.TRACE_DOC:
+                    value = QueryTraceDoc.model_validate_json(sse.data)
+                else:
+                    # TODO: result events can include numeric data, but there
+                    # is no type marker to indicate the type. For now we will
+                    # just return as a string.
+                    value = sse.data
+
+                yield QueryEvent(event_type=QueryEventType(sse.event), data=value)
+        return None
 
     # ----------------------------------------------
     # Transform APIs
@@ -326,25 +395,35 @@ class Client:
         )
 
     def delete_properties(
-        self, *, docset_id: str, schema: Schema, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id: str,
+        property_names: list[str],
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> Response[TransformResponse]:
+
         req = self.client.build_request(
             "POST",
             "/v1/jobs/delete-properties",
             params={"docset_id": docset_id},
-            json=schema.model_dump(),
+            json={"names": property_names},
             headers=extra_headers,
         )
         return self._make_request(req, TransformResponse)
 
     def delete_properties_async(
-        self, *, docset_id: str, schema: Schema, extra_headers: Optional[dict[str, str]] = None
+        self,
+        *,
+        docset_id: str,
+        property_names: list[str],
+        extra_headers: Optional[dict[str, str]] = None,
     ) -> AsyncTask[TransformResponse]:
+
         req = self.client.build_request(
             "POST",
             "/v1/async/submit/jobs/delete-properties",
             params={"docset_id": docset_id},
-            json=schema.model_dump(),
+            json={"names": property_names},
             headers=extra_headers,
         )
 
