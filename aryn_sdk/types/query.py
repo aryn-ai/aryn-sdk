@@ -42,6 +42,9 @@ class LogicalPlan(BaseModel):
 class Query(BaseModel):
     """Query a DocSet with a given natural language query string. One of 'query' or 'plan' must be provided."""
 
+    docset_id: Optional[str] = None
+    """The docset against which to run the query"""
+
     query: Optional[str] = None
     """The natural language query to run. if specified, `plan` must not be set."""
 
@@ -50,6 +53,12 @@ class Query(BaseModel):
 
     stream: bool = False
     """If true, query results will be streamed back to the client as they are generated."""
+
+    summarize_result: bool = False
+    """
+    If true, an english summary of the result in context of the original query will be returned.
+    Only available for streaming mode.
+    """
 
     bookmark_source: Optional[str] = None
 
