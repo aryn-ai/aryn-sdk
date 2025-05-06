@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 
 class TokenizerOptions(BaseModel):
     model_name: Annotated[Optional[str], Field(description="The name of the tokenizer model.")] = None
+    max_tokens: Annotated[Optional[int], Field(description="The maximum number of tokens.")] = None
 
     class Config:
         # Ensure that extra fields are not allowed

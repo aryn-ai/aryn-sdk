@@ -2,12 +2,15 @@ from enum import Enum
 from typing import Any, MutableMapping, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from .document import Document
 
 
 class Node(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    """A single operation in a logical plan."""
+
+    model_config = ConfigDict(extra="allow", use_attribute_docstrings=True)
 
     node_type: Optional[str] = Field(default=None)
     """The type of this node."""
@@ -23,6 +26,10 @@ class Node(BaseModel):
 
 
 class LogicalPlan(BaseModel):
+    """A logical query plan used to evaluate a query."""
+
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
     query: str
     """The query that the plan is for."""
 
@@ -40,7 +47,9 @@ class LogicalPlan(BaseModel):
 
 
 class Query(BaseModel):
-    """Query a DocSet with a given natural language query string. One of 'query' or 'plan' must be provided."""
+    """A query against a DocSet. Contains either a natural language string or a query plan."""
+
+    model_config = ConfigDict(use_attribute_docstrings=True)
 
     docset_id: Optional[str] = None
     """The docset against which to run the query"""
@@ -52,17 +61,19 @@ class Query(BaseModel):
     """The logical query plan to run. If specified, `query` must not be set."""
 
     stream: bool = False
-    """If true, query results will be streamed back to the client as they are generated."""
+    """If true, query results will be streamed back to the client as they are generated. Applies only when calling the query api."""
 
     summarize_result: bool = False
     """
     If true, an english summary of the result in context of the original query will be returned.
-    Only available for streaming mode.
+    Applies only when calling the query API and only available when `stream=True`
     """
 
-    bookmark_source: Optional[str] = None
+    # Bookmarks are currently tied to the UI, so we hide them from the
+    # generated OpenAPI schema so as not to confuse callers of the API.
+    bookmark_source: SkipJsonSchema[Optional[str]] = None
 
-    bookmark_target: Optional[str] = None
+    bookmark_target: SkipJsonSchema[Optional[str]] = None
 
     @model_validator(mode="after")
     def check_not_both_query_and_plan(self):
@@ -75,6 +86,8 @@ class Query(BaseModel):
 
 class QueryResult(BaseModel):
     """The result of a non-streaming query."""
+
+    model_config = ConfigDict(use_attribute_docstrings=True)
 
     query_id: str
     """The unique ID of the query operation."""
@@ -90,6 +103,8 @@ class QueryResult(BaseModel):
 
 class QueryTraceDoc(BaseModel):
     """A document in the trace of a query result."""
+
+    model_config = ConfigDict(use_attribute_docstrings=True)
 
     node_id: int
     """The ID of the node in the query plan that produced this document."""

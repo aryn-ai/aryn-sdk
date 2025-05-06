@@ -3,7 +3,7 @@ import json
 import logging
 import mimetypes
 from os import PathLike
-from typing import Any, BinaryIO, ContextManager, Iterator, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, BinaryIO, cast, ContextManager, Iterator, Optional, Tuple, Type, TypeVar, Union
 
 import httpx
 from httpx import Request
@@ -33,13 +33,14 @@ class Client:
         aryn_url: str = "https://api.aryn.ai",
         aryn_api_key: Optional[str] = None,
         extra_headers: Optional[dict[str, str]] = None,
+        timeout: float = 120.0,
     ) -> None:
         self.aryn_url = aryn_url
 
         self.config = ArynConfig(aryn_api_key=aryn_api_key, aryn_url=aryn_url)
 
         headers = (extra_headers or {}) | {"Authorization": f"Bearer {self.config.api_key()}"}
-        self.client = httpx.Client(base_url=self.config.aryn_url(), headers=headers, timeout=90.0)
+        self.client = httpx.Client(base_url=self.config.aryn_url(), headers=headers, timeout=timeout)
 
     def _make_raw_request(self, req: Request) -> httpx.Response:
         res = self.client.send(req)
@@ -157,6 +158,35 @@ class Client:
     # Document APIs
     # ----------------------------------------------
 
+    def _resolve_add_doc_file(
+        self, file: Union[BinaryIO, str, PathLike]
+    ) -> Union[BinaryIO, Tuple[str, BinaryIO, Optional[str]]]:
+        if isinstance(file, (str, PathLike)):
+            if str(file).startswith("s3://"):
+                try:
+                    import boto3
+                except ImportError:
+                    raise ImportError("Please install the boto3 library to read from S3 URLs.")
+
+                s3 = boto3.client("s3")
+                bucket, key = str(file)[5:].split("/", 1)
+                response = s3.get_object(Bucket=bucket, Key=key)
+                stream = cast(BinaryIO, response["Body"])
+            else:
+                stream = open(file, "rb")
+
+            mime_type, _ = mimetypes.guess_type(file)
+            file_request: Union[BinaryIO, Tuple[str, BinaryIO, Optional[str]]] = (
+                str(file),
+                stream,
+                mime_type or "application/octet-stream",
+            )
+        else:
+            file_request = file
+
+        # boto3 types don't play well with mypy.
+        return file_request  # type: ignore
+
     # TODO: Better typing of DocParse options.
     def add_doc(
         self,
@@ -168,25 +198,7 @@ class Client:
     ) -> Response[DocumentMetadata]:
         file_request: Any
 
-        if isinstance(file, (str, PathLike)):
-            if str(file).startswith("s3://"):
-                try:
-                    import boto3
-                except ImportError:
-                    raise ImportError("Please install the boto3 library to read from S3 URLs.")
-
-                s3 = boto3.client("s3")
-                bucket, key = str(file)[5:].split("/", 1)
-                response = s3.get_object(Bucket=bucket, Key=key)
-                stream = response["Body"]
-            else:
-                stream = open(file, "rb")
-
-            mime_type, _ = mimetypes.guess_type(file)
-            file_request = (file, stream, mime_type or "application/octet-stream")
-        else:
-            file_request = file
-
+        file_request = self._resolve_add_doc_file(file)
         files: dict[str, Any] = {"file": file_request}
 
         if options is not None:
@@ -196,6 +208,46 @@ class Client:
             "POST", f"/v1/storage/docsets/{docset_id}/docs", files=files, headers=extra_headers
         )
         return self._make_request(req, DocumentMetadata)
+
+    def _add_doc_async_internal(
+        self,
+        *,
+        file: Union[BinaryIO, str, PathLike],
+        docset_id: str,
+        options: Optional[dict[str, Any]] = None,
+        extra_headers,
+    ) -> httpx.Response:
+
+        file_request = self._resolve_add_doc_file(file)
+        files: dict[str, Any] = {"file": file_request}
+        data: dict[str, Any] = {"options": None}
+
+        if options is not None:
+            data["options"] = json.dumps(options).encode("utf-8")
+
+        req = self.client.build_request(
+            "POST", f"/v1/async/submit/storage/docsets/{docset_id}/docs", json=data, files=files, headers=extra_headers
+        )
+        return self._make_raw_request(req)
+
+    def add_doc_async(
+        self,
+        *,
+        file: Union[BinaryIO, str, PathLike],
+        docset_id: str,
+        options: Optional[dict[str, Any]] = None,
+        extra_headers: Optional[dict[str, str]] = None,
+    ) -> AsyncTask[DocumentMetadata]:
+        res = self._add_doc_async_internal(file=file, docset_id=docset_id, options=options, extra_headers=extra_headers)
+
+        task_id = res.json()["task_id"]
+        return AsyncTask(
+            client=self,
+            task_id=task_id,
+            method="POST",
+            path=f"/storage/docsets/{docset_id}/docs",
+            response_type=DocumentMetadata,
+        )
 
     # TODO: Decide what filtering we want to support here
     def list_docs(
@@ -458,31 +510,43 @@ class Client:
 
         return task_id, method_filter, path_filter
 
-    def list_async_tasks(self) -> Response[AsyncTaskMap]:
-        req = self.client.build_request("GET", "/v1/async/list")
+    def list_async_tasks(self, extra_headers: Optional[dict[str, str]] = None) -> Response[AsyncTaskMap]:
+        req = self.client.build_request("GET", "/v1/async/list", headers=extra_headers)
         return self._make_request(req, AsyncTaskMap)
 
-    def cancel_async_task(self, task: Union[AsyncTask, str]) -> SimpleResponse:
+    def cancel_async_task(
+        self, task: Union[AsyncTask, str], extra_headers: Optional[dict[str, str]] = None
+    ) -> SimpleResponse:
         task_id, method_filter, path_filter = self._get_task_and_filters(task)
 
         req = self.client.build_request(
-            "POST", f"/v1/async/cancel/{task_id}", params={"method_filter": method_filter, "path_filter": path_filter}
+            "POST",
+            f"/v1/async/cancel/{task_id}",
+            params={"method_filter": method_filter, "path_filter": path_filter},
+            headers=extra_headers,
         )
 
         res = self._make_raw_request(req)
         return SimpleResponse(res)
 
-    def _get_async_result_internal(self, task: Union[AsyncTask, str]) -> httpx.Response:
+    def _get_async_result_internal(
+        self, task: Union[AsyncTask, str], extra_headers: Optional[dict[str, str]] = None
+    ) -> httpx.Response:
         task_id, method_filter, path_filter = self._get_task_and_filters(task)
 
         req = self.client.build_request(
-            "GET", f"/v1/async/result/{task_id}", params={"method_filter": method_filter, "path_filter": path_filter}
+            "GET",
+            f"/v1/async/result/{task_id}",
+            params={"method_filter": method_filter, "path_filter": path_filter},
+            headers=extra_headers,
         )
 
         return self._make_raw_request(req)
 
-    def get_async_result(self, task: Union[AsyncTask, str]) -> Union[SimpleResponse, Response]:
-        res = self._get_async_result_internal(task)
+    def get_async_result(
+        self, task: Union[AsyncTask, str], extra_headers: Optional[dict[str, str]] = None
+    ) -> Union[SimpleResponse, Response]:
+        res = self._get_async_result_internal(task, extra_headers=extra_headers)
 
         if res.status_code == 200:
             if res.headers.get("Content-Type").lower() == "application/json":
