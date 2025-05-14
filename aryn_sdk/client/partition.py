@@ -13,6 +13,7 @@ from collections import OrderedDict
 from PIL import Image
 import base64
 import io
+import xml.etree.ElementTree as ET
 
 # URL for Aryn DocParse
 ARYN_DOCPARSE_URL = "https://api.aryn.cloud/v1/document/partition"
@@ -21,7 +22,7 @@ _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.INFO)
 _logger.addHandler(logging.StreamHandler(sys.stderr))
 
-g_version = "0.2.4"
+g_version = "0.2.1"
 g_parameters = {"path_filter": "^/v1/document/partition$"}
 
 
@@ -756,6 +757,76 @@ def partition_file_async_list(
     return tasks
 
 
+def table_elem_to_html(elem: dict[str, Any], pretty: bool = False) -> Optional[str]:
+    """
+    Create an HTML table representing the tabular data inside the provided table element.
+    If the element is not of type 'table' or doesn't contain any table data, return None instead.
+
+    Args:
+        elem: An element dict from the 'elements' field of a ``partition_file`` response.
+        pretty: If True, pretty print the HTML output. Defaults to false.
+
+    Example:
+         .. code-block:: python
+
+            from aryn_sdk.partition import partition_file, table_elem_to_html
+
+            with open("partition-me.pdf", "rb") as f:
+                data = partition_file(
+                    f,
+                    text_mode="standard_ocr",
+                    extract_table_structure=True,
+                    extract_images=True
+                )
+
+            # Find the first table and convert it to HTML
+            html = None
+            for element in data['elements']:
+                if element['type'] == 'table':
+                    html = table_elem_to_html(element)
+                    break
+
+    """
+    if elem["type"] != "table" or elem["table"] is None:
+        return None
+
+    table = ET.Element("table")
+    root = table
+
+    table_elem = elem["table"]
+
+    curr_row = -1
+    row = None
+
+    if table_elem["caption"] is not None:
+        caption = ET.SubElement(table, "caption")
+        caption.text = table_elem["caption"]
+
+    for cell in table_elem["cells"]:
+        cell_attribs = {}
+
+        rowspan = len(cell["rows"])
+        colspan = len(cell["cols"])
+
+        if rowspan > 1:
+            cell_attribs["rowspan"] = str(rowspan)
+        if colspan > 1:
+            cell_attribs["colspan"] = str(colspan)
+
+        if cell["rows"][0] > curr_row:
+            curr_row = cell["rows"][0]
+            row = ET.SubElement(table, "tr")
+
+        assert row is not None
+        tcell = ET.SubElement(row, "th" if cell["is_header"] else "td", attrib=cell_attribs)
+        tcell.text = cell["content"]
+
+    if pretty:
+        ET.indent(root)
+
+    return ET.tostring(root, encoding="unicode")
+
+
 # Heavily adapted from lib/sycamore/data/table.py::Table.to_csv()
 def table_elem_to_dataframe(elem: dict) -> Optional[pd.DataFrame]:
     """
@@ -857,6 +928,37 @@ def tables_to_pandas(data: dict) -> list[tuple[dict, Optional[pd.DataFrame]]]:
     results = []
     for e in data["elements"]:
         results.append((e, table_elem_to_dataframe(e)))
+
+    return results
+
+
+def tables_to_html(data: dict) -> list[tuple[dict, Optional[str]]]:
+    """
+    For every table element in the provided partitioning response, create an HTML
+    string representing the tabular data. Return a list containing all the elements,
+    with tables paired with their corresponding HTML.
+
+    Args:
+        data: a response from ``partition_file``
+
+    Example:
+         .. code-block:: python
+
+            from aryn_sdk.partition import partition_file, tables_to_html
+
+            with open("my-favorite-pdf.pdf", "rb") as f:
+                data = partition_file(
+                    f,
+                    aryn_api_key="MY-ARYN-API-KEY",
+                    text_mode="standard_ocr",
+                    extract_table_structure=True,
+                    extract_images=True
+                )
+            elts_and_html = tables_to_html(data)
+    """
+    results = []
+    for e in data["elements"]:
+        results.append((e, table_elem_to_html(e)))
 
     return results
 
