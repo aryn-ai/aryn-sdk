@@ -374,22 +374,7 @@ class Client:
         )
         return self._make_request(req, LogicalPlan)
 
-    def query(
-        self, *, query: Query, extra_headers: Optional[dict[str, str]] = None
-    ) -> Union[Response[QueryResult], Iterator[QueryEvent]]:
-
-        method = "POST"
-        url = "/v1/query"
-        kwargs = {
-            "json": query.model_dump(),
-        }
-        if extra_headers:
-            kwargs["headers"] = extra_headers
-
-        if not query.stream:
-            req = self.client.build_request(method, url, **kwargs)
-            return self._make_request(req, QueryResult)
-
+    def _query_streamed(self, *, method: str, url: str, kwargs: dict[str, Optional[dict[str, str]]]):
         with connect_sse(self.client, method, url, **kwargs) as event_source:
             for sse in event_source.iter_sse():
                 value: Any
@@ -407,7 +392,24 @@ class Client:
                     value = sse.data
 
                 yield QueryEvent(event_type=QueryEventType(sse.event), data=value)
-        return None
+
+    def query(
+        self, *, query: Query, extra_headers: Optional[dict[str, str]] = None
+    ) -> Union[Response[QueryResult], Iterator[QueryEvent]]:
+
+        method = "POST"
+        url = "/v1/query"
+        kwargs = {
+            "json": query.model_dump(),
+        }
+        if extra_headers:
+            kwargs["headers"] = extra_headers
+
+        if not query.stream:
+            req = self.client.build_request(method, url, **kwargs)
+            return self._make_request(req, QueryResult)
+        else:
+            return self._query_streamed(method=method, url=url, kwargs=kwargs)
 
     # ----------------------------------------------
     # Transform APIs
