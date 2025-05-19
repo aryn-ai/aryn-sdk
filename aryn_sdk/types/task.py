@@ -1,10 +1,10 @@
-from enum import StrEnum
+from enum import Enum
 
 from typing import Annotated, Optional
 from pydantic import BaseModel, Field
 
 
-class TaskStatus(StrEnum):
+class TaskStatus(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"
     DONE = "done"
