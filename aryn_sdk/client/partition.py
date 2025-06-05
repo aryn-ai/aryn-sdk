@@ -22,7 +22,7 @@ _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.INFO)
 _logger.addHandler(logging.StreamHandler(sys.stderr))
 
-g_version = "0.2.6"
+g_version = "0.2.1"
 g_parameters = {"path_filter": "^/v1/document/partition$"}
 
 
@@ -68,10 +68,11 @@ def partition_file(
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
+    table_mode: Optional[str] = None,
     use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
-    extract_table_structure: bool = False,
+    extract_table_structure: Optional[bool] = None,
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
@@ -84,6 +85,7 @@ def partition_file(
     output_format: Optional[str] = None,
     markdown_options: Optional[dict[str, Any]] = None,
     output_label_options: Optional[dict[str, Any]] = None,
+    return_pdf_base64: bool = False,
     trace_id: Optional[str] = None,  # deprecated
     extra_headers: Optional[dict[str, str]] = None,
     cancel_flag: Optional[BoolFlag] = None,
@@ -103,22 +105,33 @@ def partition_file(
         threshold: specify the cutoff for detecting bounding boxes. Must be set to "auto" or
             a floating point value between 0.0 and 1.0.
             default: None (Aryn DocParse will choose)
-        text_mode:  Allows for specifying the text extraction mode. Valid options are 'standard', 'fine_grained', 'standard_ocr', and 'vision_ocr'.
-            'standard' will use the standard text extraction pipeline, 'fine_grained' will use a more fine-grained text extraction pipeline,
-            'standard_ocr' will use the standard OCR pipeline, and 'vision_ocr' will use a vision OCR pipeline. If this option is specified,
-            it will override use_ocr and text_extraction_options even if specified.
-            default: 'standard'
+        text_mode:  Allows for specifying the text extraction mode. Valid options are 'inline_fallback_to_ocr',
+            'inline', 'ocr_standard', and 'ocr_vision'. 'inline_fallback_to_ocr' will use the standard text
+            extraction to extract text embedded in the document where possible and will use the standard OCR pipeline
+            when text is detected but not embedded in the document. 'inline' will use only the standard text extraction
+            pipeline to extract text embedded in the document and not use OCR, 'fine_grained' will use a more
+            fine-grained text extraction pipeline, 'ocr_standard' will use only the standard OCR pipeline, and
+            'ocr_vision' will use a vision OCR pipeline. If a text_mode option is specified, it will override use_ocr
+            and text_extraction_options even if they are also specified.
+            Deprecated options: 'standard', 'standard_ocr', 'vision_ocr', and 'fine_grained'.
+            default: 'inline_fallback_to_ocr'
+        table_mode: Specify the table structure extraction mode.  Valid options are 'none', 'standard', 'vision', and 'custom'
+            'none' will not extract table structure (equivalent to extract_table_structure=False),
+            'standard' will use the standard hybrid table structure extraction pipeline described at https://docs.aryn.ai/docparse/processing_options,
+            'vision' will use a vision model to extract table structure,
+            'custom' will use the custom expression described by the model_selection parameter in the table_extraction_options.
         use_ocr: deprecated, use text_mode instead.
             extract text using an OCR model instead of extracting embedded text in PDF.
             default: False
         summarize_images: Generate a text summary of detected images using a VLM.
         ocr_language: specify the language to use for OCR. If not set, the language will be english.
             default: English
-        extract_table_structure: extract tables and their structural content.
+        extract_table_structure: deprecated, use table_mode instead.
+            extract tables and their structural content.
             default: False
         text_extraction_options: 'ocr_text_mode' is deprecated, use text_mode instead.
             Specify options for text extraction, supports 'ocr_text_mode', with valid options 'vision' and 'standard' and boolean
-            'remove_line_breaks'.For 'ocr_text_mode', attempt to extract all non-table text
+            'remove_line_breaks'. For 'ocr_text_mode', attempt to extract all non-table text
             using vision models if 'vision', else will use the standard OCR pipeline. Vision is useful for documents with complex layouts
             or non-standard fonts. 'remove_line_breaks' will remove line breaks from the text.
             default: {'remove_line_breaks': False}
@@ -181,6 +194,7 @@ def partition_file(
                 }
             default: None (no element is promoted to "Title")
         trace_id: deprecated
+        return_pdf_base64: return the pdf used for partitioning as a base64 encoded string
         extra_headers: dict of HTTP headers to send to DocParse
         cancel_flag: way to interrupt partitioning from the outside
         add_to_docset_id: An optional docset_id to which to add the document.
@@ -199,7 +213,7 @@ def partition_file(
                     f,
                     aryn_api_key="MY-ARYN-API-KEY",
                     text_mode="standard_ocr",
-                    extract_table_structure=True,
+                    table_mode="standard",
                     extract_images=True
                 )
             elements = data['elements']
@@ -211,6 +225,7 @@ def partition_file(
         aryn_config=aryn_config,
         threshold=threshold,
         text_mode=text_mode,
+        table_mode=table_mode,
         use_ocr=use_ocr,
         summarize_images=summarize_images,
         ocr_language=ocr_language,
@@ -227,6 +242,7 @@ def partition_file(
         output_format=output_format,
         markdown_options=markdown_options,
         output_label_options=output_label_options,
+        return_pdf_base64=return_pdf_base64,
         trace_id=trace_id,
         extra_headers=extra_headers,
         cancel_flag=cancel_flag,
@@ -241,10 +257,11 @@ def _partition_file_wrapper(
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
+    table_mode: Optional[str] = None,
     use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
-    extract_table_structure: bool = False,
+    extract_table_structure: Optional[bool] = None,
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
@@ -257,6 +274,7 @@ def _partition_file_wrapper(
     output_format: Optional[str] = None,
     markdown_options: Optional[dict[str, Any]] = None,
     output_label_options: Optional[dict[str, Any]] = None,
+    return_pdf_base64: bool = False,
     webhook_url: Optional[str] = None,
     trace_id: Optional[str] = None,  # deprecated
     extra_headers: Optional[dict[str, str]] = None,
@@ -277,6 +295,7 @@ def _partition_file_wrapper(
             aryn_config=aryn_config,
             threshold=threshold,
             text_mode=text_mode,
+            table_mode=table_mode,
             use_ocr=use_ocr,
             summarize_images=summarize_images,
             ocr_language=ocr_language,
@@ -293,6 +312,7 @@ def _partition_file_wrapper(
             output_format=output_format,
             markdown_options=markdown_options,
             output_label_options=output_label_options,
+            return_pdf_base64=return_pdf_base64,
             trace_id=trace_id,
             extra_headers=extra_headers,
             cancel_flag=cancel_flag,
@@ -311,10 +331,11 @@ def _partition_file_inner(
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
+    table_mode: Optional[str] = None,
     use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
-    extract_table_structure: bool = False,
+    extract_table_structure: Optional[bool] = None,
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
@@ -327,6 +348,7 @@ def _partition_file_inner(
     output_format: Optional[str] = None,
     markdown_options: Optional[dict[str, Any]] = None,
     output_label_options: Optional[dict[str, Any]] = None,
+    return_pdf_base64: bool = False,
     trace_id: Optional[str] = None,  # deprecated
     extra_headers: Optional[dict[str, str]] = None,
     cancel_flag: Optional[BoolFlag] = None,
@@ -356,7 +378,13 @@ def _partition_file_inner(
             ocr_text_mode = "standard"
             if text_extraction_options and ("ocr_text_mode" in text_extraction_options):
                 ocr_text_mode = text_extraction_options["ocr_text_mode"]
-            text_mode = f"{ocr_text_mode}_ocr"
+            text_mode = f"ocr_{ocr_text_mode}"
+
+    if table_mode is not None and extract_table_structure is not None:
+        logging.warning(
+            '"table_mode" parameter was set. Since "extract_table_structure" is deprecated, using "table_mode".'
+        )
+
     if docparse_url is None:
         docparse_url = ARYN_DOCPARSE_URL
     source = "aryn-sdk"
@@ -366,6 +394,7 @@ def _partition_file_inner(
     options_str = _json_options(
         threshold=threshold,
         text_mode=text_mode,
+        table_mode=table_mode,
         summarize_images=summarize_images,
         ocr_language=ocr_language,
         extract_table_structure=extract_table_structure,
@@ -378,6 +407,7 @@ def _partition_file_inner(
         chunking_options=chunking_options,
         markdown_options=markdown_options,
         output_label_options=output_label_options,
+        return_pdf_base64=return_pdf_base64,
         add_to_docset_id=add_to_docset_id,
         source=source,
     )
@@ -483,9 +513,10 @@ def _generate_headers(
 def _json_options(
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
+    table_mode: Optional[str] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
-    extract_table_structure: bool = False,
+    extract_table_structure: Optional[bool] = None,
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
@@ -494,6 +525,7 @@ def _json_options(
     output_format: Optional[str] = None,
     chunking_options: Optional[dict[str, Any]] = None,
     markdown_options: Optional[dict[str, Any]] = None,
+    return_pdf_base64: bool = False,
     output_label_options: Optional[dict[str, Any]] = None,
     add_to_docset_id: Optional[str] = None,
     source: str = "aryn-sdk",
@@ -512,7 +544,9 @@ def _json_options(
         options["extract_image_format"] = extract_image_format
     if text_mode:
         options["text_mode"] = text_mode
-    if extract_table_structure:
+    if table_mode:
+        options["table_mode"] = table_mode
+    if extract_table_structure is not None:
         options["extract_table_structure"] = extract_table_structure
     if text_extraction_options:
         options["text_extraction_options"] = text_extraction_options
@@ -526,6 +560,8 @@ def _json_options(
         options["chunking_options"] = chunking_options
     if markdown_options:
         options["markdown_options"] = markdown_options
+    if return_pdf_base64:
+        options["return_pdf_base64"] = return_pdf_base64
     if output_label_options:
         options["output_label_options"] = output_label_options
     if add_to_docset_id:
@@ -543,6 +579,7 @@ def partition_file_async_submit(
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
+    table_mode: Optional[str] = None,
     use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
@@ -605,6 +642,7 @@ def partition_file_async_submit(
         aryn_config=aryn_config,
         threshold=threshold,
         text_mode=text_mode,
+        table_mode=table_mode,
         use_ocr=use_ocr,
         summarize_images=summarize_images,
         ocr_language=ocr_language,
@@ -774,7 +812,7 @@ def table_elem_to_html(elem: dict[str, Any], pretty: bool = False) -> Optional[s
             with open("partition-me.pdf", "rb") as f:
                 data = partition_file(
                     f,
-                    text_mode="standard_ocr",
+                    text_mode="ocr_standard",
                     extract_table_structure=True,
                     extract_images=True
                 )
@@ -844,7 +882,7 @@ def table_elem_to_dataframe(elem: dict) -> Optional[pd.DataFrame]:
             with open("partition-me.pdf", "rb") as f:
                 data = partition_file(
                     f,
-                    text_mode="standard_ocr",
+                    text_mode="ocr_standard",
                     extract_table_structure=True,
                     extract_images=True
                 )
@@ -918,7 +956,7 @@ def tables_to_pandas(data: dict) -> list[tuple[dict, Optional[pd.DataFrame]]]:
                 data = partition_file(
                     f,
                     aryn_api_key="MY-ARYN-API-KEY",
-                    text_mode="standard_ocr",
+                    text_mode="ocr_standard",
                     extract_table_structure=True,
                     extract_images=True
                 )
@@ -950,7 +988,7 @@ def tables_to_html(data: dict) -> list[tuple[dict, Optional[str]]]:
                 data = partition_file(
                     f,
                     aryn_api_key="MY-ARYN-API-KEY",
-                    text_mode="standard_ocr",
+                    text_mode="ocr_standard",
                     extract_table_structure=True,
                     extract_images=True
                 )
