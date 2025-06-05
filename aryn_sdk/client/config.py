@@ -24,7 +24,7 @@ class ArynConfig:
     def api_key(self) -> str:
         if self._aryn_api_key is not None:
             return self._aryn_api_key
-        if val := os.environ.get(_ARYN_API_KEY_ENV_VAR):
+        if val := os.getenv(_ARYN_API_KEY_ENV_VAR):
             return val
         if Path(self._aryn_config_path).exists():
             with open(self._aryn_config_path, "r") as f:
@@ -41,7 +41,7 @@ class ArynConfig:
 
         if self._aryn_url is not None:
             url = self._aryn_url
-        elif val := os.environ.get(_ARYN_URL_ENV_VAR):
+        elif val := os.getenv(_ARYN_URL_ENV_VAR):
             url = val
         elif Path(self._aryn_config_path).exists():
             with open(self._aryn_config_path, "r") as f:
