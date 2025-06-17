@@ -90,6 +90,8 @@ def partition_file(
     extra_headers: Optional[dict[str, str]] = None,
     cancel_flag: Optional[BoolFlag] = None,
     add_to_docset_id: Optional[str] = None,
+    filename: Optional[str] = None,
+    content_type: Optional[str] = None,
 ) -> dict:
     """
     Sends file to Aryn DocParse and returns a dict of its document structure and text
@@ -134,7 +136,7 @@ def partition_file(
             'remove_line_breaks'. For 'ocr_text_mode', attempt to extract all non-table text
             using vision models if 'vision', else will use the standard OCR pipeline. Vision is useful for documents with complex layouts
             or non-standard fonts. 'remove_line_breaks' will remove line breaks from the text.
-            default: {'remove_line_breaks': False}
+            default: {'remove_line_breaks': True}
         table_extraction_options: Specify options for table extraction. Only enabled if table extraction
             is enabled. Default is {}. Options:
             - 'include_additional_text': Attempt to enhance the table structure by merging in tokens from
@@ -247,6 +249,8 @@ def partition_file(
         extra_headers=extra_headers,
         cancel_flag=cancel_flag,
         add_to_docset_id=add_to_docset_id,
+        filename=filename,
+        content_type=content_type,
     )
 
 
@@ -280,6 +284,8 @@ def _partition_file_wrapper(
     extra_headers: Optional[dict[str, str]] = None,
     cancel_flag: Optional[BoolFlag] = None,
     add_to_docset_id: Optional[str] = None,
+    filename: Optional[str] = None,
+    content_type: Optional[str] = None,
 ):
     """Do not call this function directly. Use partition_file or partition_file_async_submit instead."""
 
@@ -318,6 +324,8 @@ def _partition_file_wrapper(
             cancel_flag=cancel_flag,
             webhook_url=webhook_url,
             add_to_docset_id=add_to_docset_id,
+            filename=filename,
+            content_type=content_type,
         )
     finally:
         if should_close and isinstance(file, BinaryIO):
@@ -354,6 +362,8 @@ def _partition_file_inner(
     cancel_flag: Optional[BoolFlag] = None,
     webhook_url: Optional[str] = None,
     add_to_docset_id: Optional[str] = None,
+    filename: Optional[str] = None,
+    content_type: Optional[str] = None,
 ):
     """Do not call this function directly. Use partition_file or partition_file_async_submit instead."""
 
@@ -414,7 +424,18 @@ def _partition_file_inner(
 
     _logger.debug(f"{options_str}")
 
-    files: Mapping = {"options": options_str.encode("utf-8"), "pdf": file}
+    file_metadata_list: list[Union[BinaryIO, str]] = [file]
+    if filename is not None:
+        file_metadata_list.insert(0, filename)
+    if content_type is not None:
+        file_metadata_list.append(content_type)
+        if len(file_metadata_list) == 2:
+            file_metadata_list.insert(0, file.name or "upload")
+
+    files: Mapping = {
+        "options": options_str.encode("utf-8"),
+        "file": tuple(file_metadata_list) if len(file_metadata_list) > 1 else file,
+    }
     headers = _generate_headers(aryn_config.api_key(), webhook_url, trace_id, extra_headers)
 
     content = []
@@ -601,6 +622,8 @@ def partition_file_async_submit(
     webhook_url: Optional[str] = None,
     async_submit_url: Optional[str] = None,
     add_to_docset_id: Optional[str] = None,
+    filename: Optional[str] = None,
+    content_type: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Submits a file to be partitioned asynchronously. Meant to be used in tandem with `partition_file_async_result`.
@@ -663,6 +686,8 @@ def partition_file_async_submit(
         extra_headers=extra_headers,
         webhook_url=webhook_url,
         add_to_docset_id=add_to_docset_id,
+        filename=filename,
+        content_type=content_type,
     )
 
 
