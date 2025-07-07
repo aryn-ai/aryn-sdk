@@ -187,7 +187,7 @@ client = Client()
 docset_id = None # my docset id
 
 # Do RAG on the documents
-query = Query(docset_id=docset_id, query="test_query", stream=True, summarize_result=True, rag_mode=True)
+query = Query(docset_id=docset_id, query="test_query", stream=True, rag_mode=True)
 results = client.query(query=query)
 
 # Do Deep Analytics on the documents
