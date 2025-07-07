@@ -69,6 +69,11 @@ class Query(BaseModel):
     Applies only when calling the query API and only available when `stream=True`
     """
 
+    rag_mode: bool = False
+    """
+    If true, the query will only run a RAG query plan.
+    """
+
     # Bookmarks are currently tied to the UI, so we hide them from the
     # generated OpenAPI schema so as not to confuse callers of the API.
     bookmark_source: SkipJsonSchema[Optional[str]] = None
@@ -81,6 +86,18 @@ class Query(BaseModel):
             raise ValueError("query and plan cannot both be specified")
         if self.query is None and self.plan is None:
             raise ValueError("one of query or plan is required")
+        return self
+
+    @model_validator(mode="after")
+    def check_rag_mode_query_and_plan(self):
+        if self.rag_mode and self.plan is not None:
+            raise ValueError("plan must not be specified when rag_mode is True, use query instead")
+        return self
+
+    @model_validator(mode="after")
+    def check_rag_mode_and_summarize_result(self):
+        if self.rag_mode and not self.summarize_result:
+            raise ValueError("summarize_result must be True when rag_mode is True")
         return self
 
 
@@ -123,6 +140,10 @@ class QueryEventType(str, Enum):
     RESULT_DOC = "result_doc"
     STATUS = "status"
     TRACE_DOC = "trace_doc"
+    RESULT_SUMMARY = "result_summary"
+    RAG_SOURCE = "rag_source"
+    RAG_ANSWER = "rag_answer"
+    CITATIONS = "citations"
 
 
 class QueryEvent(BaseModel):

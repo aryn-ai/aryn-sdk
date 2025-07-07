@@ -33,7 +33,7 @@ class Client:
         aryn_url: str = "https://api.aryn.ai",
         aryn_api_key: Optional[str] = None,
         extra_headers: Optional[dict[str, str]] = None,
-        timeout: float = 120.0,
+        timeout: float = 240.0,
     ) -> None:
         self.aryn_url = aryn_url
 
@@ -375,6 +375,8 @@ class Client:
         return self._make_request(req, LogicalPlan)
 
     def _query_streamed(self, *, method: str, url: str, kwargs: dict[str, Optional[dict[str, str]]]):
+        from pydantic_core import from_json
+
         with connect_sse(self.client, method, url, **kwargs) as event_source:
             for sse in event_source.iter_sse():
                 value: Any
@@ -382,7 +384,12 @@ class Client:
                 if sse.event == QueryEventType.PLAN:
                     value = LogicalPlan.model_validate_json(sse.data)
                 elif sse.event == QueryEventType.RESULT_DOC:
-                    value = Document.model_validate_json(sse.data)
+                    # TODO: Make doc_id optional in a Document. It will probably
+                    # screw up a bunch of type-checking everywhere :(
+                    d = from_json(sse.data)
+                    if d.get("doc_id") is None:
+                        d["doc_id"] = "unknown"
+                    value = Document.model_validate(d)
                 elif sse.event == QueryEventType.TRACE_DOC:
                     value = QueryTraceDoc.model_validate_json(sse.data)
                 else:

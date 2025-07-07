@@ -478,7 +478,14 @@ def _partition_file_inner(
     body = b"".join(content).decode("utf-8")
     _logger.debug("Recieved data from ArynPartitioner")
 
-    data = json.loads(body)
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as e:
+        # This likely means we got a 502 or something similar that returned HTML or something else instead of JSON.
+        _logger.error(f"Failed to decode JSON from ArynPartitioner: {e}")
+        _logger.debug(f"Raw response body: {body}")
+        raise PartitionError("Failed to decode JSON from ArynPartitioner", 500)
+
     assert isinstance(data, dict)
     status = data.get("status", [])
     if error := data.get("error"):

@@ -17,7 +17,7 @@ class DocSetMetadata(BaseModel):
     properties: Optional[dict[str, JsonValue]] = Field(
         default=None, description="Additional properties for the DocSet."
     )
-    size: Optional[int] = Field(default=None, description="The size of the DocSet in bytes.")
+    size: Optional[int] = Field(default=None, description="The number of documents in the DocSet.")
     schema_: Optional[Schema] = Field(
         default=None,
         validation_alias=AliasChoices("query_schema", "schema"),
