@@ -155,12 +155,13 @@ client.delete_doc(docset_id=docset_id, doc_id=doc_id)
 client.get_doc_binary()
 ```
 
-## Query
+## Search
 
 You can run vector and keyword search queries on the documents stored in DocParse storage.
 
 ```python
 from aryn_sdk.client.client import Client
+from aryn_sdk.types.search import SearchRequest
 
 client = Client()
 docset_id = None # my docset id
@@ -172,6 +173,26 @@ results = client.search(docset_id=docset_id, query="my query")
 # Search by filter
 filter_request = SearchRequest(query="test_filter_query", properties_filter="(properties.entity.name='test')")
 results = client.search(docset_id=docset_id, query="my query")
+```
+
+## Query
+
+You can do RAG and Deep Analytics on the documents stored in Docparse storage.
+
+```python
+from aryn_sdk.client.client import Client
+from aryn_sdk.types.query import Query
+
+client = Client()
+docset_id = None # my docset id
+
+# Do RAG on the documents
+query = Query(docset_id=docset_id, query="test_query", stream=True, summarize_result=True, rag_mode=True)
+results = client.query(query=query)
+
+# Do Deep Analytics on the documents
+query = Query(docset_id=docset_id, query="test_query", stream=True)
+results = client.query(query=query)
 ```
 
 ## Extract additional properties (metadata) from your documents
