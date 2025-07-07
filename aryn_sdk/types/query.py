@@ -94,12 +94,6 @@ class Query(BaseModel):
             raise ValueError("plan must not be specified when rag_mode is True, use query instead")
         return self
 
-    @model_validator(mode="after")
-    def check_rag_mode_and_summarize_result(self):
-        if self.rag_mode and not self.summarize_result:
-            raise ValueError("summarize_result must be True when rag_mode is True")
-        return self
-
 
 class QueryResult(BaseModel):
     """The result of a non-streaming query."""
