@@ -17,8 +17,8 @@ from aryn_sdk.partition import partition_file
 with open("partition-me.pdf", "rb") as f:
     data = partition_file(
         f,
-        use_ocr=True,
-        extract_table_structure=True,
+        text_mode="inline_fallback_to_ocr",
+        table_mode="standard",
         extract_images=True
     )
 elements = data['elements']
@@ -32,8 +32,8 @@ from aryn_sdk.partition import partition_file, table_elem_to_dataframe
 with open("partition-me.pdf", "rb") as f:
     data = partition_file(
         f,
-        use_ocr=True,
-        extract_table_structure=True,
+        text_mode="standard_ocr",
+        table_mode="vision",
         extract_images=True
     )
 
@@ -53,8 +53,7 @@ from aryn_sdk.partition import partition_file, tables_to_pandas
 with open("partition-me.pdf", "rb") as f:
     data = partition_file(
         f,
-        use_ocr=True,
-        extract_table_structure=True,
+        table_mode="standard",
         extract_images=True
     )
 elements_and_tables = tables_to_pandas(data)
@@ -69,8 +68,6 @@ from aryn_sdk.partition import partition_file, draw_with_boxes
 with open("partition-me.pdf", "rb") as f:
     data = partition_file(
         f,
-        use_ocr=True,
-        extract_table_structure=True,
         extract_images=True
     )
 page_pics = draw_with_boxes("partition-me.pdf", data, draw_table_cells=True)
