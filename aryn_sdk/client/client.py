@@ -1,9 +1,10 @@
 from contextlib import nullcontext
+import re
 import json
 import logging
 import mimetypes
 from os import PathLike
-from typing import Any, BinaryIO, cast, ContextManager, Iterator, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, BinaryIO, ContextManager, Iterator, Optional, Tuple, Type, TypeVar, Union
 
 import httpx
 from httpx import Request
@@ -24,6 +25,9 @@ from ..types.task import AsyncTaskMap
 from ..types.transforms import TransformResponse
 
 ResponseType = TypeVar("ResponseType")
+
+re_http = re.compile(r"https?://")
+re_file = re.compile(r"file:((?=/[^/])|//(?=/)|//localhost(?=/))(.*)")
 
 
 class Client:
@@ -158,11 +162,13 @@ class Client:
     # Document APIs
     # ----------------------------------------------
 
-    def _resolve_add_doc_file(
-        self, file: Union[BinaryIO, str, PathLike]
-    ) -> Union[BinaryIO, Tuple[str, BinaryIO, Optional[str]]]:
-        if isinstance(file, (str, PathLike)):
-            if str(file).startswith("s3://"):
+    def _resolve_add_doc_file(self, file: Union[BinaryIO, str, PathLike, httpx.URL]) -> dict[str, Any]:
+        if isinstance(file, httpx.URL):
+            return {"file_url": str(file).encode()}
+        elif isinstance(file, PathLike):
+            return {"file": _make_file_tuple(str(file))}
+        elif isinstance(file, str):
+            if file.startswith("s3://"):
                 try:
                     import boto3
                 except ImportError:
@@ -171,35 +177,27 @@ class Client:
                 s3 = boto3.client("s3")
                 bucket, key = str(file)[5:].split("/", 1)
                 response = s3.get_object(Bucket=bucket, Key=key)
-                stream = cast(BinaryIO, response["Body"])
-            else:
-                stream = open(file, "rb")
-
-            mime_type, _ = mimetypes.guess_type(file)
-            file_request: Union[BinaryIO, Tuple[str, BinaryIO, Optional[str]]] = (
-                str(file),
-                stream,
-                mime_type or "application/octet-stream",
-            )
+                mime, _ = mimetypes.guess_type(file)
+                return {"file": (file, response["Body"], mime or "application/octet-stream")}
+            elif mat := re_http.match(file):  # http://
+                return {"file_url": file.encode()}
+            elif mat := re_file.match(file):  # file:/
+                return {"file": _make_file_tuple(mat.group(2))}
+            else:  # regular path
+                return {"file": _make_file_tuple(file)}
         else:
-            file_request = file
-
-        # boto3 types don't play well with mypy.
-        return file_request  # type: ignore
+            return {"file": file}  # assume it's a file-like
 
     # TODO: Better typing of DocParse options.
     def add_doc(
         self,
         *,
-        file: Union[BinaryIO, str, PathLike],
+        file: Union[BinaryIO, str, PathLike, httpx.URL],
         docset_id: str,
         options: Optional[dict[str, Any]] = None,
         extra_headers: Optional[dict[str, str]] = None,
     ) -> Response[DocumentMetadata]:
-        file_request: Any
-
-        file_request = self._resolve_add_doc_file(file)
-        files: dict[str, Any] = {"file": file_request}
+        files = self._resolve_add_doc_file(file)
 
         if options is not None:
             files["options"] = json.dumps(options).encode("utf-8")
@@ -571,3 +569,8 @@ class Client:
         # This should be unreachable, as other status codes should be handled by _make_raw_request
         logging.error(f"Unexpected status code {res.status_code} for async task {task}")
         raise ArynSDKException(res)
+
+
+def _make_file_tuple(path: str) -> tuple[str, BinaryIO, str]:
+    mime, _ = mimetypes.guess_type(path)
+    return (path, open(path, "rb"), mime or "application/octet-stream")

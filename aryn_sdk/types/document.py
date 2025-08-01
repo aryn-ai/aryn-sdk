@@ -1,9 +1,11 @@
 from typing import Annotated, Any, Literal, Optional, Union
-from pydantic import AliasChoices, BaseModel, Field, JsonValue, PlainValidator, WrapSerializer
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, PlainValidator, WrapSerializer
 
 
 class DocumentMetadata(BaseModel):
     """ """
+
+    model_config = ConfigDict(extra="allow")
 
     account_id: str = Field(description="The account id containing the Document.")
     doc_id: str = Field(description="The unique id for the Document.")
