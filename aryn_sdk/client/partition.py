@@ -1,7 +1,7 @@
 from os import PathLike
+from pathlib import Path
 from typing import BinaryIO, Literal, Optional, Union, Any
 from urllib.parse import urlparse, urlunparse
-from collections.abc import Mapping
 from .config import ArynConfig
 import httpx
 import sys
@@ -22,7 +22,7 @@ _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.INFO)
 _logger.addHandler(logging.StreamHandler(sys.stderr))
 
-g_version = "0.2.10"
+g_version = "0.2.8"
 g_parameters = {"path_filter": "^/v1/document/partition$"}
 
 
@@ -62,36 +62,37 @@ class BoolFlag:
 
 
 def partition_file(
-    file: Union[BinaryIO, str, PathLike],
+    file: Union[BinaryIO, str, PathLike, httpx.URL],
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
     table_mode: Optional[str] = None,
-    use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
-    extract_table_structure: Optional[bool] = None,
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
+    image_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
-    extract_image_format: Optional[str] = None,
     selected_pages: Optional[list[Union[list[int], int]]] = None,
     chunking_options: Optional[dict[str, Any]] = None,
-    aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
     docparse_url: Optional[str] = None,
     ssl_verify: bool = True,
     output_format: Optional[str] = None,
     markdown_options: Optional[dict[str, Any]] = None,
     output_label_options: Optional[dict[str, Any]] = None,
     return_pdf_base64: bool = False,
-    trace_id: Optional[str] = None,  # deprecated
     extra_headers: Optional[dict[str, str]] = None,
     cancel_flag: Optional[BoolFlag] = None,
     add_to_docset_id: Optional[str] = None,
     filename: Optional[str] = None,
     content_type: Optional[str] = None,
+    aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
+    trace_id: Optional[str] = None,  # deprecated
+    extract_image_format: Optional[str] = None,  # deprecated in favor of image_extraction_options
+    extract_table_structure: Optional[bool] = None,  # deprecated in favor of table_mode
+    use_ocr: Optional[bool] = None,  # deprecated in favor of text_mode
 ) -> dict:
     """
     Sends file to Aryn DocParse and returns a dict of its document structure and text
@@ -122,10 +123,14 @@ def partition_file(
             'standard' will use the standard hybrid table structure extraction pipeline described at https://docs.aryn.ai/docparse/processing_options,
             'vision' will use a vision model to extract table structure,
             'custom' will use the custom expression described by the model_selection parameter in the table_extraction_options.
-        use_ocr: deprecated, use text_mode instead.
-            extract text using an OCR model instead of extracting embedded text in PDF.
-            default: False
-        summarize_images: Generate a text summary of detected images using a VLM.
+        summarize_images: Generate a text summary of all images in the document, replaces the text extracted.
+        image_extraction_options: Specify options for image extraction. Only enabled if image extraction
+            is enabled. Default is {}. Options:
+            - 'associate_captions': associate captions with the images they describe. Returns the resized image with the caption
+                as a caption attribute. Default: False
+            - 'extract_image_format': specify the format of the extracted images. Only applies when extract_images=True.
+              Must be one of ["PPM", "PNG", "JPEG"]
+            default: "PPM"
         ocr_language: specify the language to use for OCR. If not set, the language will be english.
             default: English
         extract_table_structure: deprecated, use table_mode instead.
@@ -147,9 +152,6 @@ def partition_file(
         extract_images: extract image contents. By default returns the image in base64 encoded ppm format,
               but can be configured to return the image in other formats via the extract_image_format parameter.
             default: False
-        extract_image_format: specify the format of the extracted images. Only applies when extract_images=True.
-              Must be one of ["PPM", "PNG", "JPEG"]
-            default: PPM
         selected_pages: list of individual pages (1-indexed) from the pdf to partition
             default: None
         chunking_options: Specify options for chunking the document.
@@ -195,11 +197,18 @@ def partition_file(
                     "orientation_correction": True
                 }
             default: None (no element is promoted to "Title")
-        trace_id: deprecated
         return_pdf_base64: return the pdf used for partitioning as a base64 encoded string
         extra_headers: dict of HTTP headers to send to DocParse
         cancel_flag: way to interrupt partitioning from the outside
         add_to_docset_id: An optional docset_id to which to add the document.
+        use_ocr: deprecated, use text_mode instead.
+            extract text using an OCR model instead of extracting embedded text in PDF.
+            default: False
+        extract_image_format: deprecated, use the value of 'extract_image_format' in image_extraction_options instead.
+        extract_table_structure: deprecated, use table_mode instead.
+            extract tables and their structural content.
+        trace_id: deprecated
+
 
     Returns:
         A dictionary containing "status", "elements", and possibly "error"
@@ -234,6 +243,7 @@ def partition_file(
         extract_table_structure=extract_table_structure,
         text_extraction_options=text_extraction_options,
         table_extraction_options=table_extraction_options,
+        image_extraction_options=image_extraction_options,
         extract_images=extract_images,
         extract_image_format=extract_image_format,
         selected_pages=selected_pages,
@@ -255,24 +265,21 @@ def partition_file(
 
 
 def _partition_file_wrapper(
-    file: Union[BinaryIO, str, PathLike],
+    file: Union[BinaryIO, str, PathLike, httpx.URL],
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
     table_mode: Optional[str] = None,
-    use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
-    extract_table_structure: Optional[bool] = None,
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
+    image_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
-    extract_image_format: Optional[str] = None,
     selected_pages: Optional[list[Union[list[int], int]]] = None,
     chunking_options: Optional[dict[str, Any]] = None,
-    aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
     docparse_url: Optional[str] = None,
     ssl_verify: bool = True,
     output_format: Optional[str] = None,
@@ -280,19 +287,38 @@ def _partition_file_wrapper(
     output_label_options: Optional[dict[str, Any]] = None,
     return_pdf_base64: bool = False,
     webhook_url: Optional[str] = None,
-    trace_id: Optional[str] = None,  # deprecated
     extra_headers: Optional[dict[str, str]] = None,
     cancel_flag: Optional[BoolFlag] = None,
     add_to_docset_id: Optional[str] = None,
     filename: Optional[str] = None,
     content_type: Optional[str] = None,
+    use_ocr: Optional[bool] = None,  # deprecated in favor of text_mode
+    extract_image_format: Optional[str] = None,  # deprecated in favor of image_extraction_options
+    extract_table_structure: Optional[bool] = None,  # deprecated in favor of table_mode
+    trace_id: Optional[str] = None,  # deprecated
+    aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
 ):
     """Do not call this function directly. Use partition_file or partition_file_async_submit instead."""
 
     # If you hand me a path for the file, read it in instead of trying to send the path
     should_close = False
     try:
-        if isinstance(file, (str, PathLike)):
+        if isinstance(file, str):
+            if file.startswith("https://") or file.startswith("http://"):
+                file = httpx.URL(file)
+            elif file.startswith("file:///"):
+                file = Path(file[7:])
+            elif file.startswith("file://localhost/"):
+                file = Path(file[16:])
+            elif file.startswith("file://"):
+                raise ValueError(f"Unsupported file URL: {file}")
+            elif file.startswith("file:/"):
+                file = Path(file[5:])
+            elif file.startswith("file:"):
+                raise ValueError(f"Unsupported file URL: {file}")
+            else:
+                file = Path(file)
+        if isinstance(file, PathLike):
             file = open(file, "rb")
             should_close = True
         return _partition_file_inner(
@@ -308,6 +334,7 @@ def _partition_file_wrapper(
             extract_table_structure=extract_table_structure,
             text_extraction_options=text_extraction_options,
             table_extraction_options=table_extraction_options,
+            image_extraction_options=image_extraction_options,
             extract_images=extract_images,
             extract_image_format=extract_image_format,
             selected_pages=selected_pages,
@@ -333,37 +360,38 @@ def _partition_file_wrapper(
 
 
 def _partition_file_inner(
-    file: BinaryIO,
+    file: Union[BinaryIO, httpx.URL],
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
     table_mode: Optional[str] = None,
-    use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
-    extract_table_structure: Optional[bool] = None,
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
+    image_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
-    extract_image_format: Optional[str] = None,
     selected_pages: Optional[list[Union[list[int], int]]] = None,
     chunking_options: Optional[dict[str, Any]] = None,
-    aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
     docparse_url: Optional[str] = None,
     ssl_verify: bool = True,
     output_format: Optional[str] = None,
     markdown_options: Optional[dict[str, Any]] = None,
     output_label_options: Optional[dict[str, Any]] = None,
     return_pdf_base64: bool = False,
-    trace_id: Optional[str] = None,  # deprecated
     extra_headers: Optional[dict[str, str]] = None,
     cancel_flag: Optional[BoolFlag] = None,
     webhook_url: Optional[str] = None,
     add_to_docset_id: Optional[str] = None,
     filename: Optional[str] = None,
     content_type: Optional[str] = None,
+    use_ocr: Optional[bool] = None,  # deprecated in favor of text_mode
+    extract_image_format: Optional[str] = None,  # deprecated in favor of image_extraction_options
+    extract_table_structure: Optional[bool] = None,  # deprecated in favor of table_mode
+    trace_id: Optional[str] = None,  # deprecated
+    aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
 ):
     """Do not call this function directly. Use partition_file or partition_file_async_submit instead."""
 
@@ -392,7 +420,7 @@ def _partition_file_inner(
 
     if table_mode is not None and extract_table_structure is not None:
         logging.warning(
-            '"table_mode" parameter was set. Since "extract_table_structure" is deprecated, using "table_mode".'
+            '"table_mode" and "extract_table_structure" parameters were both set. "extract_table_structure" is deprecated, using "table_mode".'
         )
 
     if docparse_url is None:
@@ -410,6 +438,7 @@ def _partition_file_inner(
         extract_table_structure=extract_table_structure,
         text_extraction_options=text_extraction_options,
         table_extraction_options=table_extraction_options,
+        image_extraction_options=image_extraction_options,
         extract_images=extract_images,
         extract_image_format=extract_image_format,
         selected_pages=selected_pages,
@@ -424,18 +453,25 @@ def _partition_file_inner(
 
     _logger.debug(f"{options_str}")
 
-    file_metadata_list: list[Union[BinaryIO, str]] = [file]
-    if filename is not None:
-        file_metadata_list.insert(0, filename)
-    if content_type is not None:
-        file_metadata_list.append(content_type)
-        if len(file_metadata_list) == 2:
-            file_metadata_list.insert(0, file.name or "upload")
-
-    files: Mapping = {
+    files: dict[str, Any] = {
         "options": options_str.encode("utf-8"),
-        "file": tuple(file_metadata_list) if len(file_metadata_list) > 1 else file,
     }
+
+    if isinstance(file, httpx.URL):
+        files["file_url"] = str(file).encode()
+    else:
+        file_metadata_list: list[Union[BinaryIO, str]] = [file]
+        if filename is not None:
+            file_metadata_list.insert(0, filename)
+        if content_type is not None:
+            file_metadata_list.append(content_type)
+            if len(file_metadata_list) == 2:
+                file_metadata_list.insert(0, file.name or "upload")
+        if len(file_metadata_list) == 1:
+            files["file"] = file
+        else:
+            files["file"] = tuple(file_metadata_list)
+
     headers = _generate_headers(aryn_config.api_key(), webhook_url, trace_id, extra_headers)
 
     content = []
@@ -547,6 +583,7 @@ def _json_options(
     extract_table_structure: Optional[bool] = None,
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
+    image_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
     extract_image_format: Optional[str] = None,
     selected_pages: Optional[list[Union[list[int], int]]] = None,
@@ -580,6 +617,8 @@ def _json_options(
         options["text_extraction_options"] = text_extraction_options
     if table_extraction_options:
         options["table_extraction_options"] = table_extraction_options
+    if image_extraction_options:
+        options["image_extraction_options"] = image_extraction_options
     if selected_pages:
         options["selected_pages"] = selected_pages
     if output_format:
@@ -601,36 +640,37 @@ def _json_options(
 
 
 def partition_file_async_submit(
-    file: Union[BinaryIO, str, PathLike],
+    file: Union[BinaryIO, str, PathLike, httpx.URL],
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
     table_mode: Optional[str] = None,
-    use_ocr: Optional[bool] = None,
     summarize_images: bool = False,
     ocr_language: Optional[str] = None,
-    extract_table_structure: bool = False,
     text_extraction_options: Optional[dict[str, Any]] = None,
     table_extraction_options: Optional[dict[str, Any]] = None,
+    image_extraction_options: Optional[dict[str, Any]] = None,
     extract_images: bool = False,
-    extract_image_format: Optional[str] = None,
     selected_pages: Optional[list[Union[list[int], int]]] = None,
     chunking_options: Optional[dict[str, Any]] = None,
-    aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
     docparse_url: Optional[str] = None,
     ssl_verify: bool = True,
     output_format: Optional[str] = None,
     markdown_options: Optional[dict[str, Any]] = None,
     output_label_options: Optional[dict[str, Any]] = None,
-    trace_id: Optional[str] = None,  # deprecated
     extra_headers: Optional[dict[str, str]] = None,
     webhook_url: Optional[str] = None,
     async_submit_url: Optional[str] = None,
     add_to_docset_id: Optional[str] = None,
     filename: Optional[str] = None,
     content_type: Optional[str] = None,
+    extract_image_format: Optional[str] = None,  # deprecated in favor of image_extraction_options
+    use_ocr: Optional[bool] = None,  # deprecated in favor of text_mode
+    trace_id: Optional[str] = None,  # deprecated
+    extract_table_structure: Optional[bool] = None,  # deprecated in favor of table_mode
+    aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
 ) -> dict[str, Any]:
     """
     Submits a file to be partitioned asynchronously. Meant to be used in tandem with `partition_file_async_result`.
@@ -679,6 +719,7 @@ def partition_file_async_submit(
         extract_table_structure=extract_table_structure,
         text_extraction_options=text_extraction_options,
         table_extraction_options=table_extraction_options,
+        image_extraction_options=image_extraction_options,
         extract_images=extract_images,
         extract_image_format=extract_image_format,
         selected_pages=selected_pages,
