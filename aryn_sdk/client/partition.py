@@ -1001,7 +1001,7 @@ def table_elem_to_dataframe(elem: dict) -> Optional[pd.DataFrame]:
     header = grid[: max_header_prefix_row + 1, :]
     flattened_header = []
     for npcol in header.transpose():
-        flattened_header.append(" | ".join(OrderedDict.fromkeys((c for c in npcol if c != ""))))
+        flattened_header.append(" | ".join(OrderedDict.fromkeys((c for c in npcol if c != "" and c != None))))
     df = pd.DataFrame(
         grid[max_header_prefix_row + 1 :, :],
         index=None,
