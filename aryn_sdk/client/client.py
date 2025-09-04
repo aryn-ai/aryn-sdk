@@ -4,7 +4,7 @@ import json
 import logging
 import mimetypes
 from os import PathLike
-from typing import Any, BinaryIO, ContextManager, Iterator, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, BinaryIO, ContextManager, Iterator, Literal, Optional, Tuple, Type, TypeVar, Union
 
 import httpx
 from httpx import Request
@@ -23,6 +23,7 @@ from ..types.schema import Schema
 from ..types.search import SearchRequest, SearchResponse
 from ..types.task import AsyncTaskMap
 from ..types.transforms import TransformResponse
+from sycamore.schema import SchemaV2
 
 ResponseType = TypeVar("ResponseType")
 
@@ -31,17 +32,17 @@ re_file = re.compile(r"file:((?=/[^/])|//(?=/)|//localhost(?=/))(.*)")
 
 
 class Client:
-
     def __init__(
         self,
-        aryn_url: str = "https://api.aryn.ai",
+        aryn_url: Optional[str] = None,
         aryn_api_key: Optional[str] = None,
         extra_headers: Optional[dict[str, str]] = None,
         timeout: float = 240.0,
+        region: Optional[Literal["US", "EU"]] = None,
     ) -> None:
         self.aryn_url = aryn_url
 
-        self.config = ArynConfig(aryn_api_key=aryn_api_key, aryn_url=aryn_url)
+        self.config = ArynConfig(aryn_api_key=aryn_api_key, aryn_url=aryn_url, region=region)
 
         headers = (extra_headers or {}) | {"Authorization": f"Bearer {self.config.api_key()}"}
         self.client = httpx.Client(base_url=self.config.aryn_url(), headers=headers, timeout=timeout)
@@ -157,6 +158,37 @@ class Client:
             self.client.build_request("DELETE", f"/v1/storage/docsets/{docset_id}", headers=extra_headers),
             DocSetMetadata,
         )
+
+    def suggest_properties(
+        self,
+        *,
+        docset_id: str,
+        doc_ids: Optional[list[str]] = None,
+        sample_ratio: Optional[float] = None,
+        exec_mode: str = "RAY",
+        existing_schema: Optional[SchemaV2] = None,
+        extra_headers: Optional[dict[str, str]] = None,
+    ) -> Response[SchemaV2]:
+
+        if doc_ids is not None and sample_ratio is not None:
+            raise ValueError("Cannot specify both doc_ids and sample_ratio. Use one or the other.")
+        if sample_ratio is not None and (sample_ratio < 0.0 or sample_ratio > 1.0):
+            raise ValueError("sample_ratio must be in the range [0.0, 1.0].")
+        if exec_mode is not None and exec_mode not in ("LOCAL", "RAY"):
+            raise ValueError("exec_mode must be either 'LOCAL' or 'RAY'.")
+
+        req = self.client.build_request(
+            "POST",
+            f"/v1/storage/docsets/{docset_id}/suggest-properties",
+            json={
+                "doc_ids": doc_ids,
+                "sample_ratio": sample_ratio,
+                "exec_mode": exec_mode,
+                "existing_schema": existing_schema.model_dump() if existing_schema is not None else None,
+            },
+            headers=extra_headers,
+        )
+        return self._make_request(req, SchemaV2)
 
     # ----------------------------------------------
     # Document APIs

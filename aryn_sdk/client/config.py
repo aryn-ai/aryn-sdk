@@ -1,13 +1,14 @@
 from os import PathLike
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 import yaml
 
 _DEFAULT_PATH = Path.home() / ".aryn" / "config.yaml"
 _ARYN_API_KEY_ENV_VAR = "ARYN_API_KEY"
 _ARYN_URL_ENV_VAR = "ARYN_API_URL"
 _DEFAULT_ARYN_URL = "https://api.aryn.ai"
+_DEFAULT_ARYN_URL_PATTERN = "https://api.{region}.aryn.ai"
 
 
 class ArynConfig:
@@ -16,10 +17,12 @@ class ArynConfig:
         aryn_config_path: PathLike = _DEFAULT_PATH,
         aryn_api_key: Optional[str] = None,
         aryn_url: Optional[str] = None,
+        region: Optional[Literal["US", "EU"]] = None,
     ):
         self._aryn_config_path = Path(aryn_config_path)
         self._aryn_api_key = aryn_api_key
         self._aryn_url = aryn_url
+        self._aryn_region = region
 
     def api_key(self) -> str:
         if self._aryn_api_key is not None:
@@ -48,6 +51,8 @@ class ArynConfig:
                 data = yaml.safe_load(f)
                 if "aryn_url" in data:
                     url = data["aryn_url"]
+        elif self._aryn_region is not None:
+            url = _DEFAULT_ARYN_URL_PATTERN.format(region=self._aryn_region.lower())
         else:
             url = _DEFAULT_ARYN_URL
 
