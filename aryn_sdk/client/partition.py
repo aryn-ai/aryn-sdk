@@ -17,12 +17,14 @@ import xml.etree.ElementTree as ET
 
 # URL for Aryn DocParse
 ARYN_DOCPARSE_URL = "https://api.aryn.cloud/v1/document/partition"
+ARYN_DOCPARSE_URL_PATTERN = "https://api.{region}.aryn.cloud/v1/document/partition"
+
 
 _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.INFO)
 _logger.addHandler(logging.StreamHandler(sys.stderr))
 
-g_version = "0.2.11"
+g_version = "0.2.12"
 g_parameters = {"path_filter": "^/v1/document/partition$"}
 
 
@@ -66,6 +68,7 @@ def partition_file(
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
+    region: Optional[Literal["US", "EU"]] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
     table_mode: Optional[str] = None,
@@ -105,19 +108,19 @@ def partition_file(
         aryn_config: ArynConfig object, used for finding an api key.
             If aryn_api_key is set it will override this.
             default: The default ArynConfig looks in the env var ARYN_API_KEY and the file ~/.aryn/config.yaml
+        region: Specify the Aryn region to use. Valid options are "US" and "EU".
         threshold: specify the cutoff for detecting bounding boxes. Must be set to "auto" or
             a floating point value between 0.0 and 1.0.
             default: None (Aryn DocParse will choose)
-        text_mode:  Allows for specifying the text extraction mode. Valid options are 'inline_fallback_to_ocr',
-            'inline', 'ocr_standard', and 'ocr_vision'. 'inline_fallback_to_ocr' will use the standard text
+        text_mode:  Allows for specifying the text extraction mode. Valid options are 'auto',
+            'inline_fallback_to_ocr', 'ocr_standard', and 'ocr_vision'. 'auto' will use an intelligent pipelined extraction using both
+            embedded text extraction and OCR extraction. 'inline_fallback_to_ocr' will use the standard text
             extraction to extract text embedded in the document where possible and will use the standard OCR pipeline
-            when text is detected but not embedded in the document. 'inline' will use only the standard text extraction
-            pipeline to extract text embedded in the document and not use OCR, 'fine_grained' will use a more
-            fine-grained text extraction pipeline, 'ocr_standard' will use only the standard OCR pipeline, and
+            when text is detected but not embedded in the document. 'ocr_standard' will use only the standard OCR pipeline, and
             'ocr_vision' will use a vision OCR pipeline. If a text_mode option is specified, it will override use_ocr
             and text_extraction_options even if they are also specified.
-            Deprecated options: 'standard', 'standard_ocr', 'vision_ocr', and 'fine_grained'.
-            default: 'inline_fallback_to_ocr'
+            Deprecated options: 'inline', 'standard', 'standard_ocr', 'vision_ocr', and 'fine_grained'.
+            default: 'auto'
         table_mode: Specify the table structure extraction mode.  Valid options are 'none', 'standard', 'vision', and 'custom'
             'none' will not extract table structure (equivalent to extract_table_structure=False),
             'standard' will use the standard hybrid table structure extraction pipeline described at https://docs.aryn.ai/docparse/processing_options,
@@ -169,8 +172,8 @@ def partition_file(
             Left in for backwards compatibility. Use docparse_url instead.
         docparse_url: url of Aryn DocParse endpoint.
         ssl_verify: verify ssl certificates. In databricks, set this to False to fix ssl imcompatibilities.
-        output_format: controls output representation; can be set to "markdown" or "json"
-            default: None (JSON elements)
+        output_format: controls output representation; can be set to "markdown", "html", or "json"
+            default: json
         markdown_options: A dictionary for configuring markdown output behavior. It supports three options:
             include_headers, a boolean specifying whether to include headers in the markdown output, include_footers,
             a boolean specifying whether to include footers in the markdown output, and include_pagenum, a boolean
@@ -234,6 +237,7 @@ def partition_file(
         file=file,
         aryn_api_key=aryn_api_key,
         aryn_config=aryn_config,
+        region=region,
         threshold=threshold,
         text_mode=text_mode,
         table_mode=table_mode,
@@ -269,6 +273,7 @@ def _partition_file_wrapper(
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
+    region: Optional[Literal["US", "EU"]] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
     table_mode: Optional[str] = None,
@@ -325,6 +330,7 @@ def _partition_file_wrapper(
             file=file,
             aryn_api_key=aryn_api_key,
             aryn_config=aryn_config,
+            region=region,
             threshold=threshold,
             text_mode=text_mode,
             table_mode=table_mode,
@@ -364,6 +370,7 @@ def _partition_file_inner(
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
+    region: Optional[Literal["US", "EU"]] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
     table_mode: Optional[str] = None,
@@ -424,7 +431,11 @@ def _partition_file_inner(
         )
 
     if docparse_url is None:
-        docparse_url = ARYN_DOCPARSE_URL
+        if region is not None:
+            docparse_url = ARYN_DOCPARSE_URL_PATTERN.replace("{region}", region.lower())
+        else:
+            docparse_url = ARYN_DOCPARSE_URL
+
     source = "aryn-sdk"
     if extra_headers:
         source = extra_headers.get("X-Aryn-Origin", "aryn-sdk")
@@ -644,6 +655,7 @@ def partition_file_async_submit(
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
+    region: Optional[Literal["US", "EU"]] = None,
     threshold: Optional[Union[float, Literal["auto"]]] = None,
     text_mode: Optional[str] = None,
     table_mode: Optional[str] = None,
@@ -698,18 +710,29 @@ def partition_file_async_submit(
 
     if async_submit_url:
         docparse_url = async_submit_url
+        if region is not None:
+            logging.warning("region is set but async_submit_url is also set, ignoring region")
     elif not aps_url and not docparse_url:
-        docparse_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/submit", truncate=False)
+        if region is not None:
+            docparse_url = _convert_sync_to_async_url(
+                ARYN_DOCPARSE_URL_PATTERN.format(region=region), "/submit", truncate=False
+            )
+        else:
+            docparse_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/submit", truncate=False)
     else:
         if aps_url:
             aps_url = _convert_sync_to_async_url(aps_url, "/submit", truncate=False)
+            if region is not None:
+                logging.warning("region is set but aps_url is also set, ignoring region")
         if docparse_url:
             docparse_url = _convert_sync_to_async_url(docparse_url, "/submit", truncate=False)
-
+            if region is not None:
+                logging.warning("region is set but docparse_url is also set, ignoring region")
     return _partition_file_wrapper(
         file=file,
         aryn_api_key=aryn_api_key,
         aryn_config=aryn_config,
+        region=region,
         threshold=threshold,
         text_mode=text_mode,
         table_mode=table_mode,
@@ -757,6 +780,7 @@ def partition_file_async_result(
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
+    region: Optional[Literal["US", "EU"]] = None,
     ssl_verify: bool = True,
     async_result_url: Optional[str] = None,
 ) -> dict[str, Any]:
@@ -776,7 +800,14 @@ def partition_file_async_result(
         Unlike `partition_file`, this function does not raise an Exception if the partitioning failed.
     """
     if not async_result_url:
-        async_result_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/result", truncate=True)
+        if region is not None:
+            async_result_url = _convert_sync_to_async_url(
+                ARYN_DOCPARSE_URL_PATTERN.format(region=region), "/result", truncate=True
+            )
+        else:
+            async_result_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/result", truncate=True)
+    elif region is not None:
+        logging.warning("region is set but async_result_url is also set, ignoring region")
 
     aryn_config = _process_config(aryn_api_key, aryn_config)
 
@@ -799,6 +830,7 @@ def partition_file_async_cancel(
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
+    region: Optional[Literal["US", "EU"]] = None,
     ssl_verify: bool = True,
     async_cancel_url: Optional[str] = None,
 ) -> None:
@@ -811,8 +843,15 @@ def partition_file_async_cancel(
     For an example of usage see README.md
     """
     if not async_cancel_url:
-        async_cancel_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/cancel", truncate=True)
-
+        if region is not None:
+            async_cancel_url = _convert_sync_to_async_url(
+                ARYN_DOCPARSE_URL_PATTERN.format(region=region), "/cancel", truncate=True
+            )
+        else:
+            async_cancel_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/cancel", truncate=True)
+    elif region is not None:
+        logging.warning("region is set but async_cancel_url is also set, ignoring region")
+    logging.info(f"async_cancel_url: {async_cancel_url}")
     aryn_config = _process_config(aryn_api_key, aryn_config)
 
     specific_task_url = f"{async_cancel_url.rstrip('/')}/{task_id}"
@@ -831,6 +870,7 @@ def partition_file_async_list(
     *,
     aryn_api_key: Optional[str] = None,
     aryn_config: Optional[ArynConfig] = None,
+    region: Optional[Literal["US", "EU"]] = None,
     ssl_verify: bool = True,
     async_list_url: Optional[str] = None,
 ) -> dict[str, Any]:
@@ -850,7 +890,14 @@ def partition_file_async_list(
         }
     """
     if not async_list_url:
-        async_list_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/list", truncate=True)
+        if region is not None:
+            async_list_url = _convert_sync_to_async_url(
+                ARYN_DOCPARSE_URL_PATTERN.format(region=region), "/list", truncate=True
+            )
+        else:
+            async_list_url = _convert_sync_to_async_url(ARYN_DOCPARSE_URL, "/list", truncate=True)
+    elif region is not None:
+        logging.warning("region is set but async_list_url is also set, ignoring region")
 
     aryn_config = _process_config(aryn_api_key, aryn_config)
 
