@@ -4,7 +4,7 @@ import json
 import logging
 import mimetypes
 from os import PathLike
-from typing import Any, BinaryIO, ContextManager, Iterator, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, BinaryIO, ContextManager, Iterator, Literal, Optional, Tuple, Type, TypeVar, Union
 
 import httpx
 from httpx import Request
@@ -31,17 +31,17 @@ re_file = re.compile(r"file:((?=/[^/])|//(?=/)|//localhost(?=/))(.*)")
 
 
 class Client:
-
     def __init__(
         self,
-        aryn_url: str = "https://api.aryn.ai",
+        aryn_url: Optional[str] = None,
         aryn_api_key: Optional[str] = None,
         extra_headers: Optional[dict[str, str]] = None,
         timeout: float = 240.0,
+        region: Optional[Literal["US", "EU"]] = None,
     ) -> None:
         self.aryn_url = aryn_url
 
-        self.config = ArynConfig(aryn_api_key=aryn_api_key, aryn_url=aryn_url)
+        self.config = ArynConfig(aryn_api_key=aryn_api_key, aryn_url=aryn_url, region=region)
 
         headers = (extra_headers or {}) | {"Authorization": f"Bearer {self.config.api_key()}"}
         self.client = httpx.Client(base_url=self.config.aryn_url(), headers=headers, timeout=timeout)
