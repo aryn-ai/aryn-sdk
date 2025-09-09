@@ -1,13 +1,14 @@
 from os import PathLike
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 import yaml
 
 _DEFAULT_PATH = Path.home() / ".aryn" / "config.yaml"
 _ARYN_API_KEY_ENV_VAR = "ARYN_API_KEY"
 _ARYN_URL_ENV_VAR = "ARYN_API_URL"
 _DEFAULT_ARYN_URL = "https://api.aryn.ai"
+_DEFAULT_ARYN_URL_PATTERN = "https://api.{region}.aryn.ai"
 
 
 class ArynConfig:
@@ -16,10 +17,12 @@ class ArynConfig:
         aryn_config_path: PathLike = _DEFAULT_PATH,
         aryn_api_key: Optional[str] = None,
         aryn_url: Optional[str] = None,
+        region: Optional[Literal["US", "EU"]] = None,
     ):
         self._aryn_config_path = Path(aryn_config_path)
         self._aryn_api_key = aryn_api_key
         self._aryn_url = aryn_url
+        self._aryn_region = region
 
     def api_key(self) -> str:
         if self._aryn_api_key is not None:
@@ -37,24 +40,16 @@ class ArynConfig:
         )
 
     def aryn_url(self) -> str:
-        url = None
-
         if self._aryn_url is not None:
-            url = self._aryn_url
-        elif val := os.getenv(_ARYN_URL_ENV_VAR):
-            url = val
-        elif Path(self._aryn_config_path).exists():
+            return self._aryn_url
+        if val := os.getenv(_ARYN_URL_ENV_VAR):
+            return val
+        if Path(self._aryn_config_path).exists():
             with open(self._aryn_config_path, "r") as f:
                 data = yaml.safe_load(f)
                 if "aryn_url" in data:
-                    url = data["aryn_url"]
-        else:
-            url = _DEFAULT_ARYN_URL
+                    return data["aryn_url"]
+        if self._aryn_region is not None:
+            return _DEFAULT_ARYN_URL_PATTERN.format(region=self._aryn_region.lower())
 
-        if url is None:
-            raise ValueError(
-                f"Could not find an aryn url. Checked the {_ARYN_URL_ENV_VAR} env "
-                f"var, the {self._aryn_config_path} config file, and the aryn_url parameter"
-            )
-
-        return url
+        return _DEFAULT_ARYN_URL

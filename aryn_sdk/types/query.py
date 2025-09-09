@@ -74,6 +74,9 @@ class Query(BaseModel):
     If true, the query will only run a RAG query plan.
     """
 
+    model_name: Optional[str] = None
+    """The name of the model to use for the query. If not specified, the default model will be used."""
+
     # Bookmarks are currently tied to the UI, so we hide them from the
     # generated OpenAPI schema so as not to confuse callers of the API.
     bookmark_source: SkipJsonSchema[Optional[str]] = None
