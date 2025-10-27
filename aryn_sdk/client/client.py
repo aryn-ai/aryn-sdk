@@ -9,7 +9,7 @@ from typing import Any, BinaryIO, ContextManager, Iterator, Literal, Optional, T
 import httpx
 from httpx import Request
 from httpx_sse import connect_sse
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from .config import ArynConfig
 from .exceptions import ArynSDKException
@@ -60,7 +60,7 @@ class Client:
     ) -> Response[ResponseType]:
         res = self._make_raw_request(req)
 
-        return Response(raw_response=res, value=response_type(**res.json()))
+        return Response(raw_response=res, value=TypeAdapter(response_type).validate_python(res.json()))
 
     def _make_paginated_request(
         self, req: Request, responseType: Type[ResponseType], list_key: str, *request_args, **request_kwargs
@@ -404,7 +404,7 @@ class Client:
 
         method = "POST"
         url = "/v1/query"
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "json": query.model_dump(),
         }
         if extra_headers:
