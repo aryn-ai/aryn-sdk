@@ -1,3 +1,4 @@
+import copy
 from os import PathLike
 from pathlib import Path
 from typing import BinaryIO, Literal, Optional, Union, Any
@@ -14,6 +15,8 @@ from PIL import Image
 import base64
 import io
 import xml.etree.ElementTree as ET
+
+from ..types.schema import Schema
 
 # URL for Aryn DocParse
 ARYN_DOCPARSE_URL = "https://api.aryn.cloud/v1/document/partition"
@@ -96,6 +99,7 @@ def partition_file(
     extract_image_format: Optional[str] = None,  # deprecated in favor of image_extraction_options
     extract_table_structure: Optional[bool] = None,  # deprecated in favor of table_mode
     use_ocr: Optional[bool] = None,  # deprecated in favor of text_mode
+    property_extraction_options: Optional[dict[str, Any]] = None,
 ) -> dict:
     """
     Sends file to Aryn DocParse and returns a dict of its document structure and text
@@ -204,6 +208,8 @@ def partition_file(
         extra_headers: dict of HTTP headers to send to DocParse
         cancel_flag: way to interrupt partitioning from the outside
         add_to_docset_id: An optional docset_id to which to add the document.
+        filename: the name of the file being partitioned
+        content_type: the equivalent of Content-Type, e.g. application/pdf
         use_ocr: deprecated, use text_mode instead.
             extract text using an OCR model instead of extracting embedded text in PDF.
             default: False
@@ -211,6 +217,10 @@ def partition_file(
         extract_table_structure: deprecated, use table_mode instead.
             extract tables and their structural content.
         trace_id: deprecated
+        property_extraction_options: a dictionary of options for extracting properties from the input file.
+            Supported options:
+                schema: a list of properties each of which describes a piece of data to be extracted from the file.
+                        Refer to https://docs.aryn.ai/docparse/aryn_sdk for details on how to provide a schema.
 
 
     Returns:
@@ -265,6 +275,7 @@ def partition_file(
         add_to_docset_id=add_to_docset_id,
         filename=filename,
         content_type=content_type,
+        property_extraction_options=property_extraction_options,
     )
 
 
@@ -302,6 +313,7 @@ def _partition_file_wrapper(
     extract_table_structure: Optional[bool] = None,  # deprecated in favor of table_mode
     trace_id: Optional[str] = None,  # deprecated
     aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
+    property_extraction_options: Optional[dict[str, Any]] = None,
 ):
     """Do not call this function directly. Use partition_file or partition_file_async_submit instead."""
 
@@ -359,6 +371,7 @@ def _partition_file_wrapper(
             add_to_docset_id=add_to_docset_id,
             filename=filename,
             content_type=content_type,
+            property_extraction_options=property_extraction_options,
         )
     finally:
         if should_close and isinstance(file, BinaryIO):
@@ -399,6 +412,7 @@ def _partition_file_inner(
     extract_table_structure: Optional[bool] = None,  # deprecated in favor of table_mode
     trace_id: Optional[str] = None,  # deprecated
     aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
+    property_extraction_options: Optional[dict[str, Any]] = None,
 ):
     """Do not call this function directly. Use partition_file or partition_file_async_submit instead."""
 
@@ -460,6 +474,7 @@ def _partition_file_inner(
         return_pdf_base64=return_pdf_base64,
         add_to_docset_id=add_to_docset_id,
         source=source,
+        property_extraction_options=property_extraction_options,
     )
 
     _logger.debug(f"{options_str}")
@@ -605,6 +620,7 @@ def _json_options(
     output_label_options: Optional[dict[str, Any]] = None,
     add_to_docset_id: Optional[str] = None,
     source: str = "aryn-sdk",
+    property_extraction_options: Optional[dict[str, Any]] = None,
 ) -> str:
     # isn't type-checking fun
     options: dict[str, Union[float, bool, str, list[Union[list[int], int]], dict[str, Any]]] = dict()
@@ -644,6 +660,12 @@ def _json_options(
         options["output_label_options"] = output_label_options
     if add_to_docset_id:
         options["add_to_docset_id"] = add_to_docset_id
+    if property_extraction_options:
+        if isinstance((schema := property_extraction_options.get("schema")), Schema):
+            property_extraction_options = copy.copy(property_extraction_options)
+            property_extraction_options["schema"] = schema.model_dump()
+
+        options["property_extraction_options"] = property_extraction_options
 
     options["source"] = source
 
@@ -683,6 +705,7 @@ def partition_file_async_submit(
     trace_id: Optional[str] = None,  # deprecated
     extract_table_structure: Optional[bool] = None,  # deprecated in favor of table_mode
     aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
+    property_extraction_options: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """
     Submits a file to be partitioned asynchronously. Meant to be used in tandem with `partition_file_async_result`.
@@ -759,6 +782,7 @@ def partition_file_async_submit(
         add_to_docset_id=add_to_docset_id,
         filename=filename,
         content_type=content_type,
+        property_extraction_options=property_extraction_options,
     )
 
 
@@ -793,10 +817,12 @@ def partition_file_async_result(
     Raises a `PartitionTaskNotFoundError` if the not task with the task_id can be found.
 
     Returns:
-        A dict containing "status" and "status_code". When "status" is "done", the returned dict also contains "result"
-        which contains what would have been returned had `partition_file` been called directly. "status" can be "done"
+        A dict containing "task_status". When "task_status" is "done", the returned dict also contains "result"
+        which contains what would have been returned had `partition_file` been called directly. "task_status" can be "done"
         or "pending".
-
+        If the task is pending, the dict may also contain "last_active_times", which would indicate when the
+        last activity happened on behalf of the account.  The current reporting is for "network".
+        So, dict["last_active_times"]["network"] would report unix epoch seconds as an integer.
         Unlike `partition_file`, this function does not raise an Exception if the partitioning failed.
     """
     if not async_result_url:
@@ -817,7 +843,16 @@ def partition_file_async_result(
     if response.status_code == 200:
         return {"task_status": "done", "result": response.json()}
     elif response.status_code == 202:
-        return {"task_status": "pending"}
+        rv: dict[str, Any] = {"task_status": "pending"}
+        d: dict[str, int] = {}
+        if ary := response.headers.get_list("x-aryn-asyncifier-active-at"):
+            for hdr in ary:
+                for pair in hdr.split(";"):
+                    k, v = pair.split("=", 1)
+                    d[k.strip()] = int(v)
+            if d:
+                rv["last_active_times"] = d
+        return rv
     elif response.status_code == 404:
         raise PartitionTaskNotFoundError("No such task", response.status_code)
     else:

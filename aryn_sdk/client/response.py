@@ -1,4 +1,5 @@
 from typing import Any, Generic, Iterator, Optional, Type, TypeVar, TYPE_CHECKING
+from pydantic import TypeAdapter
 
 import httpx
 
@@ -67,7 +68,7 @@ class PaginatedResponse(Generic[T]):
 
         # TODO: Would like to get this to work with TypeAdapter[list[T]], but
         # that doesn't seem to work.
-        self.curr_page = [self._response_type(**v) for v in list_of_dicts]
+        self.curr_page = [TypeAdapter(self._response_type).validate_python(v) for v in list_of_dicts]
 
     def _get_next_page(self) -> None:
         if self._next_token is None:
