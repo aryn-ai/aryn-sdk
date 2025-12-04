@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class ConnectionType(str, Enum):
     DATABRICKS = "databricks"
     S3 = "s3"
+    S3_TABLES = "s3tables"
 
 
 class ConnectionBase(BaseModel, ABC):
@@ -19,11 +20,21 @@ class ConnectionBase(BaseModel, ABC):
     created_at: Optional[datetime] = None
 
 
-class S3Connection(ConnectionBase):
-    type: Literal[ConnectionType.S3] = ConnectionType.S3
-    bucket: str
+class AWSConnection(ConnectionBase):
     role_arn: str
     external_id: Optional[str] = None
+    region: str = "us-east-1"
+
+
+class S3Connection(AWSConnection):
+    type: Literal[ConnectionType.S3] = ConnectionType.S3
+    bucket: str
+
+
+class S3TablesConnection(AWSConnection):
+    type: Literal[ConnectionType.S3_TABLES] = ConnectionType.S3_TABLES
+    aws_account_id: str
+    bucket: str
 
 
 class DataBricksUnityCatalogConnection(ConnectionBase):
@@ -34,6 +45,6 @@ class DataBricksUnityCatalogConnection(ConnectionBase):
 
 
 Connection: TypeAlias = Annotated[
-    (S3Connection | DataBricksUnityCatalogConnection),
+    (S3Connection | DataBricksUnityCatalogConnection | S3TablesConnection),
     Field(discriminator="type"),
 ]

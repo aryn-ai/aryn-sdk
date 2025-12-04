@@ -216,15 +216,13 @@ class Client:
         extra_headers,
     ) -> httpx.Response:
 
-        file_request = self._resolve_add_doc_file(file)
-        files: dict[str, Any] = {"file": file_request}
-        data: dict[str, Any] = {"options": None}
+        files = self._resolve_add_doc_file(file)
 
         if options is not None:
-            data["options"] = json.dumps(options).encode("utf-8")
+            files["options"] = json.dumps(options).encode()
 
         req = self.client.build_request(
-            "POST", f"/v1/async/submit/storage/docsets/{docset_id}/docs", json=data, files=files, headers=extra_headers
+            "POST", f"/v1/async/submit/storage/docsets/{docset_id}/docs", files=files, headers=extra_headers
         )
         return self._make_raw_request(req)
 
@@ -275,9 +273,14 @@ class Client:
         doc_id,
         include_elements: bool = True,
         include_binary: bool = False,
+        include_original_elements: bool = False,
         extra_headers: Optional[dict[str, str]] = None,
     ) -> Response[Document]:
-        data = {"include_elements": include_elements, "include_binary": include_binary}
+        data = {
+            "include_elements": include_elements,
+            "include_binary": include_binary,
+            "include_original_elements": include_original_elements,
+        }
         req = self.client.build_request(
             "GET", f"/v1/storage/docsets/{docset_id}/docs/{doc_id}", data=data, headers=extra_headers
         )
@@ -495,6 +498,36 @@ class Client:
             path="/jobs/delete-properties",
             response_type=TransformResponse,
         )
+
+    def suggest_properties(
+        self,
+        *,
+        docset_id: str,
+        doc_ids: Optional[list[str]] = None,
+        sample_ratio: Optional[float] = None,
+        existing_schema: Optional[Schema] = None,
+        extra_headers: Optional[dict[str, str]] = None,
+    ) -> Response[Schema]:
+        if doc_ids is not None and sample_ratio is not None:
+            raise ValueError("Cannot specify both doc_ids and sample_ratio. Use one or the other.")
+        if sample_ratio is not None and (sample_ratio < 0.0 or sample_ratio > 1.0):
+            raise ValueError("sample_ratio must be in the range [0.0, 1.0].")
+
+        json_body: dict[str, Any] = {}
+        if doc_ids is not None:
+            json_body["doc_ids"] = doc_ids
+        if sample_ratio is not None:
+            json_body["sample_ratio"] = sample_ratio
+        if existing_schema is not None:
+            json_body["existing_schema"] = existing_schema.model_dump()
+        req = self.client.build_request(
+            "POST",
+            f"/v1/storage/docsets/{docset_id}/suggest-properties",
+            json=json_body,
+            headers=extra_headers,
+        )
+
+        return self._make_request(req, Schema)
 
     # ----------------------------------------------
     # Async task APIs
