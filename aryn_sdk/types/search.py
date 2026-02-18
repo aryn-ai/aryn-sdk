@@ -29,6 +29,18 @@ class SearchRequest(BaseModel):
             description='When `False`, and return_type is "element", the server does not return the embeddings of elements in the response.',
         ),
     ] = False
+    doc_inclusion_list: Annotated[
+        Optional[list[str]],
+        Field(
+            description="When set, the server returns only the documents in the list in the response.",
+        ),
+    ] = None
+    doc_exclusion_list: Annotated[
+        Optional[list[str]],
+        Field(
+            description="When set, the server ensures no documents in the list are in the response.",
+        ),
+    ] = None
 
     @model_validator(mode="after")
     def check_query_or_properties_filter_present(self):
