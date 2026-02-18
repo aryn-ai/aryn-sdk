@@ -27,7 +27,7 @@ _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.INFO)
 _logger.addHandler(logging.StreamHandler(sys.stderr))
 
-g_version = "0.2.14"
+g_version = "0.2.12"
 g_parameters = {"path_filter": "^/v1/document/partition$"}
 
 
@@ -100,6 +100,7 @@ def partition_file(
     extract_table_structure: Optional[bool] = None,  # deprecated in favor of table_mode
     use_ocr: Optional[bool] = None,  # deprecated in favor of text_mode
     property_extraction_options: Optional[dict[str, Any]] = None,
+    pipeline: Optional[str] = None,
 ) -> dict:
     """
     Sends file to Aryn DocParse and returns a dict of its document structure and text
@@ -221,8 +222,8 @@ def partition_file(
             Supported options:
                 schema: a list of properties each of which describes a piece of data to be extracted from the file.
                         Refer to https://docs.aryn.ai/docparse/aryn_sdk for details on how to provide a schema.
-
-
+        pipeline: Specify the pipeline to use when partitioning the document. Valid values are "standard",
+                  which runs the existing pipeline, and "vision" which partitions the document using PaddleOCR-VL.
     Returns:
         A dictionary containing "status", "elements", and possibly "error"
         If output_format is "markdown" then it returns a dictionary of "status", "markdown", and possibly "error"
@@ -276,6 +277,7 @@ def partition_file(
         filename=filename,
         content_type=content_type,
         property_extraction_options=property_extraction_options,
+        pipeline=pipeline,
     )
 
 
@@ -314,6 +316,7 @@ def _partition_file_wrapper(
     trace_id: Optional[str] = None,  # deprecated
     aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
     property_extraction_options: Optional[dict[str, Any]] = None,
+    pipeline: Optional[str] = None,
 ):
     """Do not call this function directly. Use partition_file or partition_file_async_submit instead."""
 
@@ -372,6 +375,7 @@ def _partition_file_wrapper(
             filename=filename,
             content_type=content_type,
             property_extraction_options=property_extraction_options,
+            pipeline=pipeline,
         )
     finally:
         if should_close and isinstance(file, BinaryIO):
@@ -413,6 +417,7 @@ def _partition_file_inner(
     trace_id: Optional[str] = None,  # deprecated
     aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
     property_extraction_options: Optional[dict[str, Any]] = None,
+    pipeline: Optional[str] = None,
 ):
     """Do not call this function directly. Use partition_file or partition_file_async_submit instead."""
 
@@ -475,6 +480,7 @@ def _partition_file_inner(
         add_to_docset_id=add_to_docset_id,
         source=source,
         property_extraction_options=property_extraction_options,
+        pipeline=pipeline,
     )
 
     _logger.debug(f"{options_str}")
@@ -621,6 +627,7 @@ def _json_options(
     add_to_docset_id: Optional[str] = None,
     source: str = "aryn-sdk",
     property_extraction_options: Optional[dict[str, Any]] = None,
+    pipeline: Optional[str] = None,
 ) -> str:
     # isn't type-checking fun
     options: dict[str, Union[float, bool, str, list[Union[list[int], int]], dict[str, Any]]] = dict()
@@ -658,7 +665,7 @@ def _json_options(
         options["return_pdf_base64"] = return_pdf_base64
     if output_label_options:
         options["output_label_options"] = output_label_options
-    if add_to_docset_id:
+    if add_to_docset_id is not None:
         options["add_to_docset_id"] = add_to_docset_id
     if property_extraction_options:
         if isinstance((schema := property_extraction_options.get("schema")), Schema):
@@ -666,6 +673,8 @@ def _json_options(
             property_extraction_options["schema"] = schema.model_dump()
 
         options["property_extraction_options"] = property_extraction_options
+    if pipeline:
+        options["pipeline"] = pipeline
 
     options["source"] = source
 
@@ -706,6 +715,7 @@ def partition_file_async_submit(
     extract_table_structure: Optional[bool] = None,  # deprecated in favor of table_mode
     aps_url: Optional[str] = None,  # deprecated in favor of docparse_url
     property_extraction_options: Optional[dict[str, Any]] = None,
+    pipeline: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Submits a file to be partitioned asynchronously. Meant to be used in tandem with `partition_file_async_result`.
@@ -783,6 +793,7 @@ def partition_file_async_submit(
         filename=filename,
         content_type=content_type,
         property_extraction_options=property_extraction_options,
+        pipeline=pipeline,
     )
 
 
