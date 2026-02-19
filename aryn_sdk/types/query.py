@@ -77,6 +77,12 @@ class Query(BaseModel):
     model_name: Optional[str] = None
     """The name of the model to use for the query. If not specified, the default model will be used."""
 
+    doc_inclusion_list: Optional[list[str]] = None
+    """If specified, only these documents (by document ID) will be included in the query."""
+
+    doc_exclusion_list: Optional[list[str]] = None
+    """If specified, these documents (by document ID) will be excluded from the query."""
+
     # Bookmarks are currently tied to the UI, so we hide them from the
     # generated OpenAPI schema so as not to confuse callers of the API.
     bookmark_source: SkipJsonSchema[Optional[str]] = None
