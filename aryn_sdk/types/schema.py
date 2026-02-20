@@ -2,6 +2,12 @@
 from typing import Any, Optional
 from pydantic import AliasChoices, BaseModel, Field
 
+# If present, import the local datatype module; otherwise, import from sycamore.datatype
+try:
+    from ._datatype import DataType
+except ImportError:
+    from sycamore.datatype import DataType
+
 # If present, import the local schema module; otherwise, import from sycamore.schema
 try:
     from ._schema import (
@@ -9,7 +15,6 @@ try:
         make_named_property,
         make_property,
         NamedProperty,
-        DataType,
         ObjectProperty,
         ArrayProperty,
         PropertyType,
@@ -21,7 +26,6 @@ except ImportError:
         make_named_property,
         make_property,
         NamedProperty,
-        DataType,
         ObjectProperty,
         ArrayProperty,
         PropertyType,
